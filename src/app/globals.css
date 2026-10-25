@@ -3,14 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --background: #f6f7f9;
-  --foreground: #172033;
-  --card: #ffffff;
-  --card-foreground: #172033;
-  --primary: #ea580c;
-  --primary-foreground: #ffffff;
-  --border: #e5e7eb;
-  --muted: #64748b;
+  --background: #0b0f19;
+  --foreground: #f8fafc;
+  --card: #111827;
+  --card-foreground: #f8fafc;
+  --primary: #f59e0b;
+  --primary-foreground: #0b0f19;
+  --border: #1e293b;
 }
 
 body {
@@ -30,80 +29,22 @@ body {
   justify-content: center;
 }
 
-/* Panels stay readable on the light operational theme. */
+/* Hiệu ứng Glassmorphism sang trọng cao cấp */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 .glass-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.25);
 }
-
-/*
- * Existing screens use Tailwind slate/amber utilities extensively. These
- * theme aliases keep the visual change consistent without touching business
- * logic or duplicating color decisions in every page.
- */
-.bg-slate-950 { background-color: #f6f7f9 !important; }
-.bg-slate-900 { background-color: #ffffff !important; }
-.bg-slate-800 { background-color: #f1f5f9 !important; }
-.bg-slate-700 { background-color: #e2e8f0 !important; }
-.bg-slate-900\/95 { background-color: rgba(255, 255, 255, 0.98) !important; }
-.bg-slate-900\/80 { background-color: rgba(248, 250, 252, 0.96) !important; }
-.bg-slate-900\/90 { background-color: rgba(248, 250, 252, 0.98) !important; }
-.bg-slate-900\/60 { background-color: rgba(248, 250, 252, 0.92) !important; }
-.bg-slate-900\/40 { background-color: rgba(241, 245, 249, 0.8) !important; }
-.bg-slate-900\/30 { background-color: rgba(241, 245, 249, 0.65) !important; }
-.bg-slate-800\/60 { background-color: rgba(241, 245, 249, 0.9) !important; }
-.bg-slate-950\/90 { background-color: rgba(246, 247, 249, 0.96) !important; }
-.bg-slate-950\/40 { background-color: rgba(241, 245, 249, 0.82) !important; }
-
-.text-slate-100,
-.text-slate-200 { color: #172033 !important; }
-.text-slate-300 { color: #334155 !important; }
-.text-slate-400,
-.text-slate-500 { color: #64748b !important; }
-.text-slate-600 { color: #94a3b8 !important; }
-.text-amber-300,
-.text-amber-400,
-.text-amber-500 { color: #c2410c !important; }
-.text-emerald-300,
-.text-emerald-400 { color: #047857 !important; }
-.text-purple-300,
-.text-purple-400 { color: #7e22ce !important; }
-.text-cyan-300,
-.text-cyan-400 { color: #0e7490 !important; }
-.text-pink-300,
-.text-pink-400 { color: #be185d !important; }
-.text-indigo-300,
-.text-indigo-400 { color: #4338ca !important; }
-.text-yellow-300,
-.text-yellow-400 { color: #a16207 !important; }
-.text-red-300,
-.text-red-400 { color: #dc2626 !important; }
-
-.border-slate-800,
-.border-slate-800\/80,
-.border-slate-700\/60,
-.border-slate-700 { border-color: #e5e7eb !important; }
-
-.bg-amber-500,
-.from-amber-500 {
-  background-color: #ea580c !important;
-  --tw-gradient-from: #ea580c var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgba(234, 88, 12, 0) var(--tw-gradient-to-position) !important;
-}
-.to-amber-600 { --tw-gradient-to: #c2410c var(--tw-gradient-to-position) !important; }
-.hover\:bg-amber-600:hover,
-.hover\:from-amber-600:hover { background-color: #c2410c !important; }
-.border-amber-500\/30 { border-color: rgba(234, 88, 12, 0.3) !important; }
-.bg-amber-500\/10 { background-color: rgba(234, 88, 12, 0.1) !important; }
-.bg-amber-500\/20 { background-color: rgba(234, 88, 12, 0.14) !important; }
-.shadow-amber-500\/20 { --tw-shadow-color: rgba(234, 88, 12, 0.18) !important; }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -112,16 +53,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #0b0f19;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #334155;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #475569;
 }
 
 /* Hiệu ứng dải món ăn chạy mượt mà (Marquee) */
@@ -139,4 +80,3 @@ body {
 .animate-marquee:hover {
   animation-play-state: paused;
 }
-
