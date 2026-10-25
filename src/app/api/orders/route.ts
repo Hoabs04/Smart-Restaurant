@@ -145,15 +145,28 @@ export async function POST(req: NextRequest) {
       const randomSuffix = crypto.randomBytes(3).toString('hex').toUpperCase();
       const orderCode = `ORD-${todayStr}-${randomSuffix}`;
 
+      // Tính tổng tiền đơn hàng trước
       let totalAmount = 0;
-      const createdItems = [];
+      for (const it of items as OrderItemInput[]) {
+        const itemInfo = menuMap.get(it.menu_item_id)!;
+        totalAmount += itemInfo.current_price * it.quantity;
+      }
 
+      // Lưu Order (Bảng cha) trước để thỏa mãn Foreign Key constraint
+      await tx.execute(
+        `INSERT INTO orders (
+          id, order_code, table_id, created_by, status, idempotency_key, total_amount, version, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, 'OPEN', $5, $6, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+        [orderId, orderCode, table_id, actor.userId, idempotency_key || null, totalAmount]
+      );
+
+      // Lưu các món ăn (Bảng con order_items)
+      const createdItems = [];
       for (const it of items as OrderItemInput[]) {
         const itemInfo = menuMap.get(it.menu_item_id)!;
         const lineTotal = itemInfo.current_price * it.quantity;
-        totalAmount += lineTotal;
-
         const orderItemId = crypto.randomUUID();
+
         await tx.execute(
           `INSERT INTO order_items (
             id, order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, status, created_at, updated_at
@@ -178,14 +191,6 @@ export async function POST(req: NextRequest) {
           lineTotal,
         });
       }
-
-      // Lưu Order
-      await tx.execute(
-        `INSERT INTO orders (
-          id, order_code, table_id, created_by, status, idempotency_key, total_amount, version, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, 'OPEN', $5, $6, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
-        [orderId, orderCode, table_id, actor.userId, idempotency_key || null, totalAmount]
-      );
 
       // Cập nhật trạng thái bàn sang OCCUPIED và tăng version
       await tx.execute(

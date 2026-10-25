@@ -39,5 +39,9 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+
+# Embedded Local Database
+.db_pglite/
+
 *.swp
 *.swo

@@ -4,9 +4,25 @@ import { cookies, headers } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from './db';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'smart_restaurant_jwt_super_secret_key_change_in_production_2026'
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing in production. Application halted to prevent unauthorized access.'
+      );
+    }
+    // Trong môi trường dev/test, nếu chưa có thì cảnh báo và nạp từ biến môi trường mặc định an toàn
+    console.warn('⚠️ CẢNH BÁO: Chưa cấu hình JWT_SECRET trong .env. Sử dụng khóa tạm cho môi trường phát triển.');
+    return new TextEncoder().encode('smart_restaurant_dev_only_secret_key_minimum_32_chars_2026');
+  }
+  if (process.env.NODE_ENV === 'production' && secret.length < 32) {
+    throw new Error('CRITICAL SECURITY ERROR: JWT_SECRET must be at least 32 characters long in production.');
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface TokenPayload {
   userId: string;

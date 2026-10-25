@@ -16,7 +16,9 @@ import {
   PlusCircle,
   Shield,
   Menu,
-  X
+  X,
+  ChevronDown,
+  Settings
 } from 'lucide-react';
 
 interface UserSession {
@@ -61,6 +63,22 @@ export default function Navbar() {
     };
   }, [pathname, router]);
 
+  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
+  const adminDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (adminDropdownRef.current && !adminDropdownRef.current.contains(event.target as Node)) {
+        setAdminDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -84,26 +102,26 @@ export default function Navbar() {
     }
   };
 
-  const navLinks = [
-    // Trang chủ
+  // Các mục điều hướng chính
+  const mainNavLinks = [
     { href: '/', label: 'Trang chủ', icon: UtensilsCrossed, roles: ['waiter', 'kitchen', 'manager'] },
-    
-    // Phục vụ & Quản lý
     { href: '/tables', label: 'Sơ đồ bàn', icon: Grid, roles: ['waiter', 'manager'] },
     { href: '/orders/new', label: 'Tạo đơn mới', icon: PlusCircle, roles: ['waiter'] },
-    
-    // Bếp
     { href: '/kitchen/queue', label: 'Queue Bếp', icon: ChefHat, roles: ['kitchen'] },
-
-    // Quản lý
     { href: '/reports', label: 'Báo cáo', icon: BarChart3, roles: ['manager'] },
-    { href: '/admin/menu', label: 'Quản lý Menu', icon: BookOpen, roles: ['manager'] },
-    { href: '/admin/tables', label: 'Quản lý Bàn', icon: Grid, roles: ['manager'] },
-    { href: '/admin/users', label: 'Tài khoản', icon: Users, roles: ['manager'] },
-    { href: '/admin/audit-log', label: 'Lịch sử thao tác', icon: FileText, roles: ['manager'] },
   ];
 
-  const allowedLinks = navLinks.filter(l => user && l.roles.includes(user.role));
+  // Các mục quản trị gom nhóm cho Quản lý (Manager)
+  const adminLinks = [
+    { href: '/admin/menu', label: 'Quản lý Menu', icon: BookOpen, desc: 'Món ăn & tồn kho' },
+    { href: '/admin/tables', label: 'Quản lý Bàn', icon: Grid, desc: 'Khu vực & sơ đồ bàn' },
+    { href: '/admin/users', label: 'Tài khoản', icon: Users, desc: 'Phân quyền nhân viên' },
+    { href: '/admin/audit-log', label: 'Lịch sử thao tác', icon: FileText, desc: 'Nhật ký kiểm toán' },
+  ];
+
+  const allowedMainLinks = mainNavLinks.filter(l => user && l.roles.includes(user.role));
+  const isManager = user?.role === 'manager';
+  const isAdminActive = pathname.startsWith('/admin');
 
   return (
     <>
@@ -136,8 +154,8 @@ export default function Navbar() {
             </div>
 
             {/* Desktop & Tablet Navigation */}
-            <nav className="hidden tablet:flex items-center gap-1 overflow-x-auto py-1">
-              {allowedLinks.map((link) => {
+            <nav className="hidden tablet:flex items-center gap-1.5 py-1">
+              {allowedMainLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = pathname === link.href || (link.href !== '/' && link.href !== '/tables' && pathname.startsWith(link.href));
                 return (
@@ -155,6 +173,65 @@ export default function Navbar() {
                   </Link>
                 );
               })}
+
+              {/* Menu Gom nhóm "Quản trị" cho Manager */}
+              {isManager && (
+                <div className="relative" ref={adminDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      isAdminActive
+                        ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20'
+                        : adminDropdownOpen
+                        ? 'bg-slate-800 text-slate-100'
+                        : 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/60'
+                    }`}
+                    aria-expanded={adminDropdownOpen}
+                    aria-haspopup="true"
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span>Quản trị</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${adminDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {adminDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800 mb-1 flex items-center gap-1.5">
+                        <Settings className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Khu vực Quản trị</span>
+                      </div>
+                      <div className="space-y-1">
+                        {adminLinks.map((link) => {
+                          const Icon = link.icon;
+                          const isActive = pathname === link.href || pathname.startsWith(link.href);
+                          return (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              onClick={() => setAdminDropdownOpen(false)}
+                              className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors ${
+                                isActive
+                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+                              }`}
+                            >
+                              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                                <Icon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold">{link.label}</div>
+                                <div className="text-[11px] text-slate-400">{link.desc}</div>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </nav>
 
             {/* User Profile & Logout */}
@@ -192,9 +269,9 @@ export default function Navbar() {
 
         {/* Mobile dropdown menu */}
         {mobileMenuOpen && (
-          <div className="tablet:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-2">
+          <div className="tablet:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-3">
             {user && (
-              <div className="p-3 bg-slate-800/60 rounded-xl mb-3 flex items-center justify-between">
+              <div className="p-3 bg-slate-800/60 rounded-xl flex items-center justify-between">
                 <div>
                   <div className="font-semibold text-slate-200 text-sm">{user.displayName}</div>
                   <div className="text-xs text-slate-400">@{user.username}</div>
@@ -204,7 +281,7 @@ export default function Navbar() {
             )}
 
             <div className="space-y-1">
-              {allowedLinks.map((link) => {
+              {allowedMainLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = pathname === link.href;
                 return (
@@ -224,6 +301,40 @@ export default function Navbar() {
                 );
               })}
             </div>
+
+            {/* Gom nhóm Quản trị trong mobile drawer */}
+            {isManager && (
+              <div className="pt-2 border-t border-slate-800/80">
+                <div className="px-2 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Khu vực Quản trị</span>
+                </div>
+                <div className="space-y-1">
+                  {adminLinks.map((link) => {
+                    const Icon = link.icon;
+                    const isActive = pathname === link.href;
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`touch-target w-full px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-3 ${
+                          isActive
+                            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                            : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 text-slate-400" />
+                        <div>
+                          <div className="font-medium">{link.label}</div>
+                          <div className="text-[11px] text-slate-500">{link.desc}</div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={handleLogout}

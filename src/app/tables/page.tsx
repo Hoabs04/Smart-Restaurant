@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import DishBannerCarousel from '@/components/DishBannerCarousel';
 import { 
   Users, 
   Clock, 
@@ -12,8 +11,7 @@ import {
   PlusCircle, 
   AlertTriangle,
   Layers,
-  ArrowRight,
-  Sparkles
+  ArrowRight
 } from 'lucide-react';
 import { formatDateTime, formatCurrency } from '@/lib/utils';
 
@@ -41,7 +39,6 @@ export default function TablesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [conflictNotice, setConflictNotice] = useState<string | null>(null);
-  const [showBanner, setShowBanner] = useState(true);
 
   const fetchTables = async () => {
     setIsLoading(true);
@@ -121,19 +118,6 @@ export default function TablesPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowBanner(!showBanner)}
-              className={`touch-target px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${
-                showBanner
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
-              }`}
-              title="Ẩn/hiện banner món ăn nổi bật"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{showBanner ? 'Ẩn banner món' : 'Hiện banner món'}</span>
-            </button>
-
-            <button
               onClick={fetchTables}
               disabled={isLoading}
               className="touch-target px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition-colors border border-slate-700 flex items-center gap-2"
@@ -143,13 +127,6 @@ export default function TablesPage() {
             </button>
           </div>
         </div>
-
-        {/* Banner Món ăn chạy nổi bật */}
-        {showBanner && (
-          <div className="mb-6">
-            <DishBannerCarousel compact />
-          </div>
-        )}
 
         {/* Xung đột hoặc cảnh báo */}
         {conflictNotice && (
