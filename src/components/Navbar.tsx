@@ -85,6 +85,9 @@ export default function Navbar() {
   };
 
   const navLinks = [
+    // Trang chủ
+    { href: '/', label: 'Trang chủ', icon: UtensilsCrossed, roles: ['waiter', 'kitchen', 'manager'] },
+    
     // Phục vụ & Quản lý
     { href: '/tables', label: 'Sơ đồ bàn', icon: Grid, roles: ['waiter', 'manager'] },
     { href: '/orders/new', label: 'Tạo đơn mới', icon: PlusCircle, roles: ['waiter'] },
@@ -118,7 +121,7 @@ export default function Navbar() {
             
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <Link href={user?.role === 'kitchen' ? '/kitchen/queue' : '/tables'} className="flex items-center gap-2.5">
+              <Link href="/" className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-amber-500/20">
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
@@ -136,7 +139,7 @@ export default function Navbar() {
             <nav className="hidden tablet:flex items-center gap-1 overflow-x-auto py-1">
               {allowedLinks.map((link) => {
                 const Icon = link.icon;
-                const isActive = pathname === link.href || (link.href !== '/tables' && pathname.startsWith(link.href));
+                const isActive = pathname === link.href || (link.href !== '/' && link.href !== '/tables' && pathname.startsWith(link.href));
                 return (
                   <Link
                     key={link.href}
