@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import { 
   FileText, 
@@ -21,7 +21,7 @@ export default function AdminAuditLogPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [viewDetailLog, setViewDetailLog] = useState<any | null>(null);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setIsLoading(true);
     try {
       const url = selectedAction !== 'ALL'
@@ -42,11 +42,11 @@ export default function AdminAuditLogPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedAction]);
 
   useEffect(() => {
     fetchLogs();
-  }, [selectedAction]);
+  }, [fetchLogs]);
 
   const getActionBadge = (action: string) => {
     switch (action) {

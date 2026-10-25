@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -87,7 +87,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [selectedAddItems, setSelectedAddItems] = useState<{ [id: string]: number }>({});
   const [isAddingItems, setIsAddingItems] = useState(false);
 
-  const fetchOrderDetail = async () => {
+  const fetchOrderDetail = useCallback(async () => {
     try {
       const res = await fetch(`/api/orders/${orderId}`);
       const data = await res.json();
@@ -101,13 +101,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
     fetchOrderDetail();
     const interval = setInterval(fetchOrderDetail, 8000); // Polling tự động làm mới
     return () => clearInterval(interval);
-  }, [orderId]);
+  }, [fetchOrderDetail]);
 
   // Load menu khi mở modal thêm món
   const openAddModal = async () => {

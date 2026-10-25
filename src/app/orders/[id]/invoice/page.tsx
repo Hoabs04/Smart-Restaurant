@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -51,7 +51,7 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [closeSuccess, setCloseSuccess] = useState(false);
 
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
     try {
       const res = await fetch(`/api/orders/${orderId}`);
       const data = await res.json();
@@ -65,11 +65,11 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
     fetchOrder();
-  }, [orderId]);
+  }, [fetchOrder]);
 
   // Xử lý chốt đơn mô phỏng
   const handleCloseOrder = async () => {

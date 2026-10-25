@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import { 
   BookOpen, 
@@ -9,7 +9,7 @@ import {
   Check, 
   X, 
   AlertCircle, 
-  RefreshCw,
+  RefreshCw, 
   Search,
   Package
 } from 'lucide-react';
@@ -36,7 +36,7 @@ export default function AdminMenuPage() {
     image_key: '',
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/admin/menu-items');
@@ -48,8 +48,8 @@ export default function AdminMenuPage() {
       if (data.success) {
         setItems(data.items || []);
         setCategories(data.categories || []);
-        if (data.categories?.length > 0 && !formData.category_id) {
-          setFormData(prev => ({ ...prev, category_id: data.categories[0].id }));
+        if (data.categories?.length > 0) {
+          setFormData(prev => prev.category_id ? prev : ({ ...prev, category_id: data.categories[0].id }));
         }
       }
     } catch {
@@ -57,11 +57,11 @@ export default function AdminMenuPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const openCreateModal = () => {
     setEditingItem(null);

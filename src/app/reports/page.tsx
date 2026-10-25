@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
 import { 
   BarChart3, 
@@ -24,7 +24,7 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage('');
 
@@ -57,11 +57,11 @@ export default function ReportsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [fetchReports]);
 
   const handleFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
