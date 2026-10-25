@@ -32,6 +32,7 @@ interface MenuItem {
   stockLabel: string;
   stockBadgeClass: string;
   canOrder: boolean;
+  imageUrl?: string | null;
 }
 
 interface CartItem {
@@ -382,47 +383,71 @@ function NewOrderContent() {
               {filteredMenuItems.map(item => (
                 <div
                   key={item.id}
-                  className={`glass-panel p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                  className={`glass-panel rounded-2xl border transition-all flex flex-col justify-between overflow-hidden group ${
                     !item.canOrder
                       ? 'border-slate-800/50 opacity-60 bg-slate-950/40'
-                      : 'border-slate-800 hover:border-slate-700'
+                      : 'border-slate-800 hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/5'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                  {/* Ảnh món ăn */}
+                  {item.imageUrl ? (
+                    <div className="relative w-full h-40 bg-slate-900 overflow-hidden shrink-0">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+                      
+                      {/* Trạng thái tồn kho: CẢ MÀU VÀ NHÃN CHỮ */}
+                      <span className={`absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-md shadow-md ${item.stockBadgeClass}`}>
+                        {item.stockLabel}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-4 pb-0 flex items-start justify-between gap-2">
                       <div className="font-bold text-slate-100 text-base leading-snug">
                         {item.name}
                       </div>
-                      
-                      {/* Trạng thái tồn kho: CẢ MÀU VÀ NHÃN CHỮ */}
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${item.stockBadgeClass}`}>
                         {item.stockLabel}
                       </span>
                     </div>
+                  )}
 
-                    <p className="text-xs text-slate-400 line-clamp-2 mb-3">
-                      {item.description || 'Hương vị thơm ngon chế biến theo công thức nhà hàng.'}
-                    </p>
-                  </div>
+                  <div className="p-4 flex flex-col justify-between flex-1">
+                    <div>
+                      {item.imageUrl && (
+                        <div className="font-bold text-slate-100 text-base leading-snug mb-1">
+                          {item.name}
+                        </div>
+                      )}
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                    <div className="text-amber-400 font-extrabold text-base">
-                      {formatCurrency(item.currentPrice)}
+                      <p className="text-xs text-slate-400 line-clamp-2 mb-3">
+                        {item.description || 'Hương vị thơm ngon chế biến theo công thức nhà hàng.'}
+                      </p>
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={!item.canOrder}
-                      onClick={() => addToCart(item)}
-                      className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        item.canOrder
-                          ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>{item.canOrder ? 'Thêm món' : 'Hết hàng'}</span>
-                    </button>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <div className="text-amber-400 font-extrabold text-base">
+                        {formatCurrency(item.currentPrice)}
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={!item.canOrder}
+                        onClick={() => addToCart(item)}
+                        className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          item.canOrder
+                            ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md shadow-amber-500/20 active:scale-95'
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>{item.canOrder ? 'Thêm món' : 'Hết hàng'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -459,6 +484,13 @@ function NewOrderContent() {
                       key={item.menuItem.id}
                       className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between gap-3"
                     >
+                      {item.menuItem.imageUrl && (
+                        <img
+                          src={item.menuItem.imageUrl}
+                          alt={item.menuItem.name}
+                          className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-700/60"
+                        />
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-slate-200 text-sm truncate">
                           {item.menuItem.name}

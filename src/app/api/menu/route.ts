@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
         stockLabel: stockInfo.label,
         stockBadgeClass: stockInfo.badgeClass,
         canOrder: r.stock_quantity > 0,
+        imageUrl: r.image_key || null,
       };
     });
 

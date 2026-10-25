@@ -102,46 +102,47 @@ async function seed() {
   const categoryRows = await db.query(`SELECT id, name FROM menu_categories;`);
   const catMap = Object.fromEntries(categoryRows.map(c => [c.name, c.id]));
 
-  // 5. Tạo Món ăn với các mức tồn kho
+  // 5. Tạo Món ăn với các mức tồn kho & ảnh minh họa
   const menuItems = [
     // Khai vị
-    { name: 'Súp bào ngư vi cá', cat: 'Khai vị', price: 280000, stock: 12, desc: 'Bào ngư cao cấp nấu cùng nước hầm thảo mộc thượng hạng' },
-    { name: 'Salad cá ngừ đại dương', cat: 'Khai vị', price: 165000, stock: 18, desc: 'Rau mầm tươi hữu cơ, cá ngừ tataki áp chảo và sốt mè rang' },
+    { name: 'Súp bào ngư vi cá', cat: 'Khai vị', price: 280000, stock: 12, desc: 'Bào ngư cao cấp nấu cùng nước hầm thảo mộc thượng hạng', img: '/images/dishes/sup-bao-ngu.jpg' },
+    { name: 'Salad cá ngừ đại dương', cat: 'Khai vị', price: 165000, stock: 18, desc: 'Rau mầm tươi hữu cơ, cá ngừ tataki áp chảo và sốt mè rang', img: '/images/dishes/salad-ca-ngu.jpg' },
     
     // Món chính
-    { name: 'Bò Wagyu Úc nướng đá muối', cat: 'Món chính', price: 650000, stock: 15, desc: 'Thịt bò Wagyu MB9 vân mỡ cẩm thạch nướng trực tiếp tại bàn' },
-    { name: 'Sườn cừu đút lò thảo mộc', cat: 'Món chính', price: 420000, stock: 8, desc: 'Sườn cừu New Zealand ướp hương thảo và sốt rượu vang đỏ' },
-    { name: 'Cơm chiên hải sản hoàng bào', cat: 'Món chính', price: 195000, stock: 25, desc: 'Cơm đảo trứng muối giòn thơm cùng tôm sú và sò điệp Nhật' },
+    { name: 'Bò Wagyu Úc nướng đá muối', cat: 'Món chính', price: 650000, stock: 15, desc: 'Thịt bò Wagyu MB9 vân mỡ cẩm thạch nướng trực tiếp tại bàn', img: '/images/dishes/bo-wagyu.jpg' },
+    { name: 'Sườn cừu đút lò thảo mộc', cat: 'Món chính', price: 420000, stock: 8, desc: 'Sườn cừu New Zealand ướp hương thảo và sốt rượu vang đỏ', img: '/images/dishes/suon-cuu.jpg' },
+    { name: 'Cơm chiên hải sản hoàng bào', cat: 'Món chính', price: 195000, stock: 25, desc: 'Cơm đảo trứng muối giòn thơm cùng tôm sú và sò điệp Nhật', img: '/images/dishes/com-chien-hai-san.jpg' },
     
     // Món sắp hết (ngưỡng 1 - 4)
-    { name: 'Cá hồi Na-uy áp chảo sốt chanh leo', cat: 'Món chính', price: 320000, stock: 3, desc: 'Phi lê cá hồi tươi thượng hạng (Cảnh báo: Sắp hết hàng)' },
-    { name: 'Rượu vang đỏ Chateau Bordeaux', cat: 'Đồ uống cao cấp', price: 1450000, stock: 2, desc: 'Niên vụ 2018 hương vị đậm đà, quý phái (Cảnh báo: Sắp hết)' },
+    { name: 'Cá hồi Na-uy áp chảo sốt chanh leo', cat: 'Món chính', price: 320000, stock: 3, desc: 'Phi lê cá hồi tươi thượng hạng (Cảnh báo: Sắp hết hàng)', img: '/images/dishes/ca-hoi-ap-chao.jpg' },
+    { name: 'Rượu vang đỏ Chateau Bordeaux', cat: 'Đồ uống cao cấp', price: 1450000, stock: 2, desc: 'Niên vụ 2018 hương vị đậm đà, quý phái (Cảnh báo: Sắp hết)', img: '/images/dishes/ruou-vang-chateau.jpg' },
 
     // Hải sản
-    { name: 'Tôm hùm bông nướng phô mai', cat: 'Hải sản tươi sống', price: 980000, stock: 6, desc: 'Tôm hùm tươi sống phủ lớp phô mai Mozzarella đút lò' },
+    { name: 'Tôm hùm bông nướng phô mai', cat: 'Hải sản tươi sống', price: 980000, stock: 6, desc: 'Tôm hùm tươi sống phủ lớp phô mai Mozzarella đút lò', img: '/images/dishes/tom-hum-nuong.jpg' },
     
     // Món hết hàng (stock = 0)
-    { name: 'Cua tuyết Hokkaido hấp sake', cat: 'Hải sản tươi sống', price: 1250000, stock: 0, desc: 'Cua tuyết tươi nhập khẩu trực tiếp từ Nhật Bản (Hết hàng)' },
+    { name: 'Cua tuyết Hokkaido hấp sake', cat: 'Hải sản tươi sống', price: 1250000, stock: 0, desc: 'Cua tuyết tươi nhập khẩu trực tiếp từ Nhật Bản (Hết hàng)', img: '/images/dishes/cua-tuyet.jpg' },
 
     // Tráng miệng
-    { name: 'Bánh Panna Cotta dâu tây rừng', cat: 'Tráng miệng', price: 85000, stock: 20, desc: 'Kem sữa béo ngậy kèm sốt dâu tươi chua ngọt' },
-    { name: 'Chè yến sào hạt sen tuyết nhĩ', cat: 'Tráng miệng', price: 180000, stock: 10, desc: 'Tổ yến thiên nhiên chưng đường phèn thanh mát' },
+    { name: 'Bánh Panna Cotta dâu tây rừng', cat: 'Tráng miệng', price: 85000, stock: 20, desc: 'Kem sữa béo ngậy kèm sốt dâu tươi chua ngọt', img: '/images/dishes/panna-cotta.jpg' },
+    { name: 'Chè yến sào hạt sen tuyết nhĩ', cat: 'Tráng miệng', price: 180000, stock: 10, desc: 'Tổ yến thiên nhiên chưng đường phèn thanh mát', img: '/images/dishes/che-yen-sao.jpg' },
 
     // Đồ uống
-    { name: 'Nước ép cam sành tươi nguyên chất', cat: 'Đồ uống cao cấp', price: 65000, stock: 30, desc: 'Cam sành tươi ép lạnh giữ trọn vitamin C' },
-    { name: 'Trà hoa cúc mật ong rừng', cat: 'Đồ uống cao cấp', price: 75000, stock: 22, desc: 'Hoa cúc sấy lạnh kết hợp mật ong hoa rừng Tây Bắc' },
+    { name: 'Nước ép cam sành tươi nguyên chất', cat: 'Đồ uống cao cấp', price: 65000, stock: 30, desc: 'Cam sành tươi ép lạnh giữ trọn vitamin C', img: '/images/dishes/nuoc-cam-ep.svg' },
+    { name: 'Trà hoa cúc mật ong rừng', cat: 'Đồ uống cao cấp', price: 75000, stock: 22, desc: 'Hoa cúc sấy lạnh kết hợp mật ong hoa rừng Tây Bắc', img: '/images/dishes/tra-hoa-cuc.svg' },
   ];
 
   for (const m of menuItems) {
     const catId = catMap[m.cat];
     if (catId) {
       await db.execute(
-        `INSERT INTO menu_items (id, category_id, name, description, current_price, availability, stock_quantity, low_stock_threshold)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 5)
+        `INSERT INTO menu_items (id, category_id, name, description, current_price, availability, stock_quantity, low_stock_threshold, image_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 5, $8)
          ON CONFLICT (name) DO UPDATE SET
            current_price = EXCLUDED.current_price,
-           stock_quantity = EXCLUDED.stock_quantity;`,
-        [crypto.randomUUID(), catId, m.name, m.desc, m.price, m.stock > 0, m.stock]
+           stock_quantity = EXCLUDED.stock_quantity,
+           image_key = EXCLUDED.image_key;`,
+        [crypto.randomUUID(), catId, m.name, m.desc, m.price, m.stock > 0, m.stock, m.img]
       );
     }
   }

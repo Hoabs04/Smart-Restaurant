@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { category_id, name, description, current_price, stock_quantity, low_stock_threshold } = body;
+    const { category_id, name, description, current_price, stock_quantity, low_stock_threshold, image_key } = body;
 
     if (!category_id || !name || current_price === undefined || current_price < 0) {
       return NextResponse.json(
@@ -75,9 +75,9 @@ export async function POST(req: NextRequest) {
 
     await db.execute(
       `INSERT INTO menu_items (
-        id, category_id, name, description, current_price, availability, stock_quantity, low_stock_threshold, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
-      [id, category_id, name.trim(), description?.trim() || null, current_price, stock > 0, stock, threshold]
+        id, category_id, name, description, current_price, availability, stock_quantity, low_stock_threshold, image_key, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+      [id, category_id, name.trim(), description?.trim() || null, current_price, stock > 0, stock, threshold, image_key?.trim() || null]
     );
 
     await logAudit({
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `Đã thêm món '${name}' vào thực đơn thành công.`,
-      item: { id, name, current_price, stock_quantity: stock, low_stock_threshold: threshold },
+      item: { id, name, current_price, stock_quantity: stock, low_stock_threshold: threshold, image_key },
     }, { status: 201 });
   } catch (error: any) {
     console.error('Lỗi API POST /api/admin/menu-items:', error);
@@ -116,7 +116,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { id, category_id, name, description, current_price, stock_quantity, low_stock_threshold, availability } = body;
+    const { id, category_id, name, description, current_price, stock_quantity, low_stock_threshold, availability, image_key } = body;
 
     if (!id || !name || current_price === undefined || current_price < 0) {
       return NextResponse.json(
@@ -132,9 +132,9 @@ export async function PUT(req: NextRequest) {
 
     await db.execute(
       `UPDATE menu_items 
-       SET category_id = $1, name = $2, description = $3, current_price = $4, stock_quantity = $5, low_stock_threshold = $6, availability = $7, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8;`,
-      [category_id, name.trim(), description?.trim() || null, current_price, stock, threshold, isAvail, id]
+       SET category_id = $1, name = $2, description = $3, current_price = $4, stock_quantity = $5, low_stock_threshold = $6, availability = $7, image_key = $8, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $9;`,
+      [category_id, name.trim(), description?.trim() || null, current_price, stock, threshold, isAvail, image_key?.trim() || null, id]
     );
 
     await logAudit({

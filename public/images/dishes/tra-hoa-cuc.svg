@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+    <defs>
+      <linearGradient id="teaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#1c1917" />
+        <stop offset="100%" stop-color="#0c0a09" />
+      </linearGradient>
+      <linearGradient id="teaLiquid" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#fef08a" />
+        <stop offset="100%" stop-color="#eab308" />
+      </linearGradient>
+    </defs>
+    <rect width="400" height="300" fill="url(#teaBg)" />
+    <!-- Shadow -->
+    <ellipse cx="200" cy="255" rx="130" ry="20" fill="#000" opacity="0.6" />
+    <!-- Cup Plate -->
+    <ellipse cx="200" cy="245" rx="100" ry="18" fill="#292524" stroke="#44403c" stroke-width="2" />
+    <!-- Glass Teacup -->
+    <path d="M140 140 Q135 220 180 230 L220 230 Q265 220 260 140 Z" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+    <!-- Tea liquid -->
+    <path d="M145 160 Q140 215 180 226 L220 226 Q260 215 255 160 Z" fill="url(#teaLiquid)" opacity="0.85" />
+    <!-- Cup handle -->
+    <path d="M260 160 Q290 160 290 190 Q290 215 255 210" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="3" />
+    <!-- Blooming Chrysanthemum Flower in Tea -->
+    <g transform="translate(200, 190) scale(0.7)">
+      <circle cx="0" cy="0" r="14" fill="#ca8a04" />
+      <!-- Petals -->
+      <ellipse cx="0" cy="-24" rx="6" ry="14" fill="#fde047" />
+      <ellipse cx="0" cy="24" rx="6" ry="14" fill="#fde047" />
+      <ellipse cx="-24" cy="0" rx="14" ry="6" fill="#fde047" />
+      <ellipse cx="24" cy="0" rx="14" ry="6" fill="#fde047" />
+      <ellipse cx="-17" cy="-17" rx="12" ry="7" transform="rotate(45 -17 -17)" fill="#facc15" />
+      <ellipse cx="17" cy="17" rx="12" ry="7" transform="rotate(45 17 17)" fill="#facc15" />
+      <ellipse cx="17" cy="-17" rx="12" ry="7" transform="rotate(-45 17 -17)" fill="#facc15" />
+      <ellipse cx="-17" cy="17" rx="12" ry="7" transform="rotate(-45 -17 17)" fill="#facc15" />
+    </g>
+    <!-- Steam -->
+    <path d="M185 130 Q175 100 185 80 Q195 60 185 40" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M215 130 Q225 100 215 80 Q205 60 215 40" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2" stroke-linecap="round" />
+    <text x="200" y="285" fill="#eab308" font-family="sans-serif" font-size="12" font-weight="bold" text-anchor="middle" letter-spacing="1">TRÀ HOA CÚC MẬT ONG RỪNG</text>
+  </svg>
