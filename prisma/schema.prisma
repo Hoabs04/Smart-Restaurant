@@ -1,0 +1,273 @@
+// ==============================================================================
+// Prisma Schema - Hệ thống Quản lý Nhà hàng Thông minh (Smart Restaurant Management)
+// Thiết kế cho PostgreSQL (Amazon RDS for PostgreSQL và local PostgreSQL/PGlite)
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. NGƯỜI DÙNG & VAI TRÒ (RBAC)
+// -----------------------------------------------------------------------------
+
+model User {
+  id            String      @id @default(uuid())
+  username      String      @unique
+  password_hash String
+  display_name  String
+  is_active     Boolean     @default(true)
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
+
+  user_roles    UserRole[]
+  orders_created Order[]    @relation("OrderCreatedBy")
+  batches_created KitchenBatch[] @relation("BatchCreatedBy")
+  status_changes OrderStatusHistory[]
+  audit_logs    AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String      @id @default(uuid())
+  code        String      @unique // manager, waiter, kitchen
+  name        String      // Quản lý, Nhân viên phục vụ, Nhân viên bếp
+  description String?
+  created_at  DateTime    @default(now())
+
+  user_roles  UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id         String   @id @default(uuid())
+  user_id    String
+  role_id    String
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, role_id])
+  @@map("user_roles")
+}
+
+// -----------------------------------------------------------------------------
+// 2. KHU VỰC & BÀN ĂN (DINING TABLES)
+// -----------------------------------------------------------------------------
+
+enum TableStatus {
+  AVAILABLE        // Trống
+  OCCUPIED         // Đang phục vụ
+  AWAITING_PAYMENT // Chờ thanh toán
+}
+
+model DiningTable {
+  id          String      @id @default(uuid())
+  area_name   String      // Khu Tầng 1, Sân Vườn, VIP, Tầng 2
+  table_code  String      @unique // Bàn 01, T-02
+  capacity    Int         @default(4)
+  status      TableStatus @default(AVAILABLE)
+  is_active   Boolean     @default(true)
+  version     Int         @default(1) // Optimistic locking chống race condition
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  orders      Order[]
+
+  @@index([area_name, status])
+  @@map("dining_tables")
+}
+
+// -----------------------------------------------------------------------------
+// 3. THỰC ĐƠN & TỒN KHO (MENU & INVENTORY)
+// -----------------------------------------------------------------------------
+
+model MenuCategory {
+  id          String      @id @default(uuid())
+  name        String      @unique // Khai vị, Món chính, Hải sản, Tráng miệng, Đồ uống
+  sort_order  Int         @default(0)
+  is_active   Boolean     @default(true)
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  menu_items  MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id                  String       @id @default(uuid())
+  category_id         String
+  name                String       @unique
+  description         String?
+  current_price       Int          // Lưu giá VND (số nguyên)
+  availability        Boolean      @default(true)
+  stock_quantity      Int          @default(10) // 0: Hết hàng, 1-4: Sắp hết, >= 5: Bình thường
+  low_stock_threshold Int          @default(5)
+  image_key           String?      // S3 object key
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  category            MenuCategory @relation(fields: [category_id], references: [id])
+  order_items         OrderItem[]
+  inventory_ledgers   InventoryLedger[]
+
+  @@index([category_id, availability])
+  @@map("menu_items")
+}
+
+// -----------------------------------------------------------------------------
+// 4. ORDER & BATCHES BẾP
+// -----------------------------------------------------------------------------
+
+enum OrderStatus {
+  OPEN             // Mới tạo hoặc mới thêm món chưa gửi
+  SENT_TO_KITCHEN  // Đã gửi ít nhất một batch tới bếp
+  IN_PROGRESS      // Bếp đang chế biến ít nhất một món
+  READY_TO_CLOSE   // Toàn bộ món chưa hủy đã READY
+  CLOSED           // Đã chốt hóa đơn mô phỏng
+}
+
+enum OrderItemStatus {
+  NEW              // Mới thêm vào order, chưa gửi bếp, chưa trừ tồn kho
+  SENT_TO_KITCHEN  // Đã gửi bếp trong batch, đã trừ tồn kho
+  IN_PROGRESS      // Bếp đang chế biến
+  READY            // Món đã sẵn sàng phục vụ
+  CANCELLED        // Đã hủy (không tính tiền, nếu hủy khi SENT thì hoàn kho 1 lần)
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  order_code      String       @unique // ORD-20261025-001
+  table_id        String
+  created_by      String
+  status          OrderStatus  @default(OPEN)
+  idempotency_key String?      @unique
+  total_amount    Int          @default(0) // Server tự tính tổng tiền các món chưa hủy
+  version         Int          @default(1) // Optimistic locking
+  created_at      DateTime     @default(now())
+  closed_at       DateTime?
+  updated_at      DateTime     @updatedAt
+
+  table           DiningTable  @relation(fields: [table_id], references: [id])
+  creator         User         @relation("OrderCreatedBy", fields: [created_by], references: [id])
+  order_items     OrderItem[]
+  kitchen_batches KitchenBatch[]
+  status_history  OrderStatusHistory[]
+
+  @@index([table_id, status])
+  @@map("orders")
+}
+
+model KitchenBatch {
+  id              String       @id @default(uuid())
+  order_id        String
+  batch_number    Int          @default(1)
+  idempotency_key String       @unique
+  sent_at         DateTime     @default(now()) // Mốc tính thời gian chờ queue bếp và cảnh báo >10 phút
+  created_by      String
+  created_at      DateTime     @default(now())
+
+  order           Order        @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  creator         User         @relation("BatchCreatedBy", fields: [created_by], references: [id])
+  order_items     OrderItem[]
+
+  @@index([sent_at])
+  @@map("kitchen_batches")
+}
+
+model OrderItem {
+  id                  String          @id @default(uuid())
+  order_id            String
+  menu_item_id        String
+  kitchen_batch_id    String?         // Gắn khi gửi batch vào bếp
+  item_name_snapshot  String          // Snapshot tên món tại thời điểm order
+  unit_price_snapshot Int             // Snapshot đơn giá VND tại thời điểm order
+  quantity            Int             @default(1)
+  status              OrderItemStatus @default(NEW)
+  cancel_reason       String?         // Bắt buộc khi hủy
+  cancelled_at        DateTime?
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+
+  order               Order           @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  menu_item           MenuItem        @relation(fields: [menu_item_id], references: [id])
+  kitchen_batch       KitchenBatch?   @relation(fields: [kitchen_batch_id], references: [id])
+  inventory_ledgers   InventoryLedger[]
+  status_history      OrderStatusHistory[]
+
+  @@index([order_id, status])
+  @@index([kitchen_batch_id])
+  @@map("order_items")
+}
+
+// -----------------------------------------------------------------------------
+// 5. SỔ CÁI TỒN KHO & LỊCH SỬ THAO TÁC (LEDGER, STATUS HISTORY, AUDIT LOG)
+// -----------------------------------------------------------------------------
+
+enum MovementType {
+  DEDUCT_ON_SEND    // Trừ kho khi gửi bếp (-quantity)
+  RESTORE_ON_CANCEL // Hoàn kho khi hủy món SENT (+quantity)
+}
+
+model InventoryLedger {
+  id              String       @id @default(uuid())
+  menu_item_id    String
+  order_item_id   String
+  movement_type   MovementType
+  quantity_delta  Int          // Âm khi trừ, dương khi hoàn
+  idempotency_key String
+  actor_id        String
+  created_at      DateTime     @default(now())
+
+  menu_item       MenuItem     @relation(fields: [menu_item_id], references: [id])
+  order_item      OrderItem    @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+
+  // Ràng buộc duy nhất ngăn chặn trừ hoặc hoàn kho lặp lại
+  @@unique([order_item_id, movement_type])
+  @@unique([idempotency_key, menu_item_id, movement_type])
+  @@map("inventory_ledger")
+}
+
+model OrderStatusHistory {
+  id            String       @id @default(uuid())
+  order_id      String
+  order_item_id String?
+  from_status   String
+  to_status     String
+  changed_by    String
+  changed_at    DateTime     @default(now())
+  note          String?
+
+  order         Order        @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  order_item    OrderItem?   @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [changed_by], references: [id])
+
+  @@index([order_id, changed_at])
+  @@map("order_status_history")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor_id    String?
+  action      String   // LOGIN, LOGOUT, CREATE_ORDER, SEND_TO_KITCHEN, CANCEL_ITEM, UPDATE_ITEM_STATUS, CLOSE_ORDER, UPDATE_MENU, UPDATE_TABLE, UPDATE_USER
+  entity_type String   // ORDER, ORDER_ITEM, MENU_ITEM, TABLE, USER, AUTH
+  entity_id   String?
+  details     String?  // JSON chuỗi ghi thông tin chi tiết
+  ip_address  String?
+  created_at  DateTime @default(now())
+
+  actor       User?    @relation(fields: [actor_id], references: [id])
+
+  @@index([action, created_at])
+  @@index([actor_id, created_at])
+  @@map("audit_logs")
+}

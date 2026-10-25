@@ -1,0 +1,43 @@
+{
+  "name": "smart-restaurant-management",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx scripts/seed.ts",
+    "test": "tsx tests/run-all.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "jose": "^5.9.6",
+    "lucide-react": "^0.460.0",
+    "next": "^15.1.0",
+    "pg": "^8.13.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.16.0",
+    "eslint-config-next": "^15.1.0",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.16",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.2"
+  }
+}

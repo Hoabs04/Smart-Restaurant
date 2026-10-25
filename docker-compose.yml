@@ -1,0 +1,46 @@
+services:
+  # Cơ sở dữ liệu PostgreSQL cục bộ (mô phỏng Amazon RDS for PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: smart-restaurant-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: smart_restaurant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./prisma/migrations/0_init/migration.sql:/docker-entrypoint-initdb.d/0_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_restaurant"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Ứng dụng Web Modular Monolith Next.js
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-restaurant-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: "postgresql://postgres:postgres_password@postgres:5432/smart_restaurant?schema=public"
+      JWT_SECRET: "smart_restaurant_jwt_super_secret_key_change_in_production_2026"
+      JWT_EXPIRES_IN: "8h"
+      LOW_STOCK_THRESHOLD: "5"
+      KITCHEN_WARNING_DELAY_MINUTES: "10"
+      ENABLE_CLOUDWATCH_LOGS: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
