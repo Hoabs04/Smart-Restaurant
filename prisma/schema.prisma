@@ -27,6 +27,7 @@ model User {
 
   user_roles    UserRole[]
   orders_created Order[]    @relation("OrderCreatedBy")
+  orders_confirmed Order[]  @relation("OrderPaymentConfirmedBy")
   batches_created KitchenBatch[] @relation("BatchCreatedBy")
   status_changes OrderStatusHistory[]
   audit_logs    AuditLog[]
@@ -119,6 +120,7 @@ model MenuItem {
   category            MenuCategory @relation(fields: [category_id], references: [id])
   order_items         OrderItem[]
   inventory_ledgers   InventoryLedger[]
+  channel_mappings    ChannelMenuMapping[]
 
   @@index([category_id, availability])
   @@map("menu_items")
@@ -147,21 +149,34 @@ enum OrderItemStatus {
 model Order {
   id              String       @id @default(uuid())
   order_code      String       @unique // ORD-20261025-001
-  table_id        String
+  table_id        String?
   created_by      String
   status          OrderStatus  @default(OPEN)
   idempotency_key String?      @unique
   total_amount    Int          @default(0) // Server tự tính tổng tiền các món chưa hủy
   version         Int          @default(1) // Optimistic locking
+  
+  // Thông tin thanh toán chuyển khoản thủ công
+  payment_method        String       @default("TRANSFER")
+  payment_status        String       @default("PENDING") // PENDING, MANUALLY_CONFIRMED
+  payment_confirmed_at  DateTime?
+  payment_confirmed_by  String?
+  payment_reference     String?
+
+  order_source          String       @default("DINE_IN") // DINE_IN, GRABFOOD, SHOPEEFOOD, BEFOOD
+  channel_order_id      String?
+
   created_at      DateTime     @default(now())
   closed_at       DateTime?
   updated_at      DateTime     @updatedAt
 
-  table           DiningTable  @relation(fields: [table_id], references: [id])
+  table           DiningTable? @relation(fields: [table_id], references: [id])
   creator         User         @relation("OrderCreatedBy", fields: [created_by], references: [id])
+  confirmer       User?        @relation("OrderPaymentConfirmedBy", fields: [payment_confirmed_by], references: [id])
   order_items     OrderItem[]
   kitchen_batches KitchenBatch[]
   status_history  OrderStatusHistory[]
+  external_orders ExternalOrder[]
 
   @@index([table_id, status])
   @@map("orders")
@@ -231,9 +246,9 @@ model InventoryLedger {
   menu_item       MenuItem     @relation(fields: [menu_item_id], references: [id])
   order_item      OrderItem    @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
 
-  // Ràng buộc duy nhất ngăn chặn trừ hoặc hoàn kho lặp lại
+  // Ràng buộc duy nhất ngăn chặn trừ hoặc hoàn kho lặp lại theo order_item_id
   @@unique([order_item_id, movement_type])
-  @@unique([idempotency_key, menu_item_id, movement_type])
+  @@index([idempotency_key])
   @@map("inventory_ledger")
 }
 
@@ -270,4 +285,124 @@ model AuditLog {
   @@index([action, created_at])
   @@index([actor_id, created_at])
   @@map("audit_logs")
+}
+
+// -----------------------------------------------------------------------------
+// 7. KÊNH BÁN HÀNG & TÍCH HỢP ĐỐI TÁC (SALES CHANNELS & PARTNERS)
+// -----------------------------------------------------------------------------
+
+model SalesChannel {
+  id                 String              @id @default(uuid())
+  code               String              @unique // GRABFOOD, SHOPEEFOOD, BEFOOD
+  name               String              // GrabFood, ShopeeFood, BeFood
+  logo_url           String?
+  is_active          Boolean             @default(false)
+  connection_status  String              @default("UNCONFIGURED") // UNCONFIGURED, CONNECTED, ERROR, DISABLED
+  last_sync_at       DateTime?
+  last_error_message String?
+  auto_confirm_order Boolean             @default(false)
+  created_at         DateTime            @default(now())
+  updated_at         DateTime            @updatedAt
+
+  credentials        ChannelCredential?
+  menu_mappings      ChannelMenuMapping[]
+  external_orders    ExternalOrder[]
+  sync_logs          SyncLog[]
+
+  @@index([is_active, connection_status])
+  @@map("sales_channels")
+}
+
+model ChannelCredential {
+  id                      String       @id @default(uuid())
+  channel_id              String       @unique
+  merchant_id             String
+  store_id                String?
+  app_id                  String?
+  app_secret_encrypted    String       // AES-256-GCM
+  access_token_encrypted  String?
+  refresh_token_encrypted String?
+  token_expires_at        DateTime?
+  webhook_secret_encrypted String?
+  environment             String       @default("SANDBOX") // SANDBOX, PRODUCTION
+  created_at              DateTime     @default(now())
+  updated_at              DateTime     @updatedAt
+
+  channel                 SalesChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+
+  @@map("channel_credentials")
+}
+
+model ChannelMenuMapping {
+  id                    String       @id @default(uuid())
+  channel_id            String
+  internal_menu_item_id String
+  external_item_id      String
+  external_item_name    String
+  external_price        Int          @default(0)
+  sync_stock            Boolean      @default(true)
+  is_active             Boolean      @default(true)
+  last_synced_at        DateTime?
+  created_at            DateTime     @default(now())
+  updated_at            DateTime     @updatedAt
+
+  channel               SalesChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  menu_item             MenuItem     @relation(fields: [internal_menu_item_id], references: [id], onDelete: Cascade)
+
+  @@unique([channel_id, internal_menu_item_id])
+  @@unique([channel_id, external_item_id])
+  @@index([channel_id, is_active])
+  @@map("channel_menu_mappings")
+}
+
+model ExternalOrder {
+  id                  String       @id @default(uuid())
+  channel_id          String
+  internal_order_id   String?
+  external_order_id   String
+  external_order_code String
+  channel_code        String       // GRABFOOD, SHOPEEFOOD
+  channel_status      String
+  normalized_status   String       // NEW, CONFIRMED, PREPARING, COMPLETED, CANCELLED
+  customer_name       String?
+  customer_phone      String?
+  delivery_address    String?
+  driver_name         String?
+  driver_phone        String?
+  total_amount        Int          @default(0)
+  platform_fee        Int          @default(0)
+  net_revenue         Int          @default(0)
+  items_json          String       // JSON string
+  raw_payload         String?      // JSON string
+  idempotency_key     String       @unique
+  ordered_at          DateTime     @default(now())
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  channel             SalesChannel @relation(fields: [channel_id], references: [id])
+  internal_order      Order?       @relation(fields: [internal_order_id], references: [id], onDelete: SetNull)
+
+  @@unique([channel_id, external_order_id])
+  @@index([channel_code, normalized_status])
+  @@index([ordered_at])
+  @@map("external_orders")
+}
+
+model SyncLog {
+  id            String       @id @default(uuid())
+  channel_id    String
+  sync_type     String       // ORDER_INGEST, STATUS_SYNC, MENU_SYNC, OUT_OF_STOCK_SYNC, WEBHOOK
+  direction     String       @default("INBOUND") // INBOUND, OUTBOUND
+  status        String       // SUCCESS, FAILED, RETRYING
+  retry_count   Int          @default(0)
+  request_data  String?
+  response_data String?
+  error_message String?
+  created_at    DateTime     @default(now())
+
+  channel       SalesChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+
+  @@index([channel_id, created_at])
+  @@index([status])
+  @@map("sync_logs")
 }

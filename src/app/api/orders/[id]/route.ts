@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { generateOrderQrCode } from '@/lib/payment-qr';
 
 export async function GET(
   req: NextRequest,
@@ -25,6 +26,13 @@ export async function GET(
       creator_name: string;
       status: string;
       total_amount: number;
+      payment_method: string | null;
+      payment_status: string | null;
+      payment_confirmed_at: string | null;
+      payment_confirmed_by: string | null;
+      payment_confirmer_name: string | null;
+      closed_by_name: string | null;
+      payment_reference: string | null;
       version: number;
       created_at: string;
       closed_at: string | null;
@@ -40,12 +48,27 @@ export async function GET(
         u.display_name as creator_name,
         o.status,
         o.total_amount,
+        o.payment_method,
+        o.payment_status,
+        o.payment_confirmed_at,
+        o.payment_confirmed_by,
+        u_conf.display_name as payment_confirmer_name,
+        COALESCE(u_closer.display_name, u_conf.display_name) as closed_by_name,
+        o.payment_reference,
         o.version,
         o.created_at,
         o.closed_at
       FROM orders o
       JOIN dining_tables t ON o.table_id = t.id
       JOIN users u ON o.created_by = u.id
+      LEFT JOIN users u_conf ON o.payment_confirmed_by = u_conf.id
+      LEFT JOIN (
+        SELECT order_id, changed_by, changed_at,
+               ROW_NUMBER() OVER(PARTITION BY order_id ORDER BY changed_at DESC) as rn
+        FROM order_status_history
+        WHERE to_status = 'CLOSED'
+      ) osh ON osh.order_id = o.id AND osh.rn = 1
+      LEFT JOIN users u_closer ON osh.changed_by = u_closer.id
       WHERE o.id = $1;`,
       [id]
     );
@@ -118,9 +141,19 @@ export async function GET(
     const readyItems = items.filter(it => it.status === 'READY');
     const cancelledItems = items.filter(it => it.status === 'CANCELLED');
 
-    // Có thể chốt đơn khi: toàn bộ món chưa hủy đều đã READY và có ít nhất 1 món chưa hủy
+    // Có thể chốt đơn khi: đơn chưa đóng và (toàn bộ món chưa hủy đều đã READY hoặc toàn bộ món đã bị hủy)
     const nonCancelled = items.filter(it => it.status !== 'CANCELLED');
-    const canCloseOrder = nonCancelled.length > 0 && nonCancelled.every(it => it.status === 'READY') && order.status === 'READY_TO_CLOSE';
+    const isAllCancelled = items.length > 0 && nonCancelled.length === 0;
+    const canCloseOrder = order.status !== 'CLOSED' && (
+      (nonCancelled.length > 0 && nonCancelled.every(it => it.status === 'READY') && order.status === 'READY_TO_CLOSE') ||
+      isAllCancelled
+    );
+
+    // Tạo dữ liệu mã QR chuyển khoản ngân hàng dựa trên tổng tiền do server quản lý
+    const qrPayment = await generateOrderQrCode({
+      orderCode: order.order_code,
+      totalAmount: Number(order.total_amount),
+    });
 
     return NextResponse.json({
       success: true,
@@ -135,6 +168,14 @@ export async function GET(
         creatorName: order.creator_name,
         status: order.status,
         totalAmount: Number(order.total_amount),
+        paymentMethod: order.payment_method || 'TRANSFER',
+        paymentStatus: order.payment_status || 'PENDING',
+        paymentConfirmedAt: order.payment_confirmed_at,
+        paymentConfirmedBy: order.payment_confirmed_by,
+        paymentConfirmerName: order.payment_confirmer_name,
+        closedByName: order.closed_by_name || order.payment_confirmer_name || 'Quản lý',
+        paymentReference: order.payment_reference,
+        qrPayment,
         version: order.version,
         createdAt: order.created_at,
         closedAt: order.closed_at,

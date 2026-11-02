@@ -15,7 +15,8 @@ Hệ thống số hóa toàn bộ quy trình vận hành khép kín:
 2. **Nhân viên bếp (Kitchen):** Theo dõi hàng đợi chế biến theo thời gian thực, sắp xếp ưu tiên theo thời gian chờ của đợt gửi (`sent_at` tăng dần), cảnh báo các món và batch chờ quá 10 phút, cập nhật trạng thái từng món ăn.
 3. **Quản lý nhà hàng (Manager):** Cấu hình bàn ăn, khu vực, danh mục, thực đơn, quản lý tài khoản nhân sự (RBAC), kiểm soát tồn kho (`stock_quantity`) và xem báo cáo doanh thu, món bán chạy cùng lịch sử thao tác (Audit Log).
 
-> ⚠️ **Lưu ý nguyên tắc nghiệp vụ:** Các tính năng "thông minh" trong hệ thống là các cảnh báo và tự động hóa theo quy tắc nghiệp vụ (Business Rules Automation), không sử dụng AI dự đoán. Hệ thống chỉ thực hiện chốt đơn và hóa đơn mô phỏng, không thu tiền hoặc tích hợp thanh toán thật.
+> ⚠️ **Lưu ý nguyên tắc nghiệp vụ & Thanh toán:** Các tính năng "thông minh" trong hệ thống là các cảnh báo và tự động hóa theo quy tắc nghiệp vụ (Business Rules Automation), không sử dụng AI dự đoán. Hệ thống sử dụng **mã QR chuyển khoản mô phỏng (chuẩn VietQR thủ công)** hiển thị số tài khoản, tên ngân hàng, chủ tài khoản, tổng tiền do server tính và nội dung chuyển khoản theo mã order (`THANHTOAN ORD-xxxx`).  
+> **Hệ thống KHÔNG tích hợp cổng thanh toán thực tế, không có Webhook ngân hàng và KHÔNG tự động xác nhận giao dịch.** Nhân viên phục vụ (`waiter`) hoặc Quản lý (`manager`) phải chủ động kiểm tra giao dịch thực tế và bấm nút *"Đã kiểm tra và nhận chuyển khoản"* để ghi nhận trạng thái thanh toán thủ công (`MANUALLY_CONFIRMED`) trước khi chốt đơn và giải phóng bàn ăn.
 
 ---
 
@@ -98,7 +99,7 @@ Hệ thống khởi tạo sẵn tài khoản mẫu cho cả 3 vai trò (có th�
 | `/tables` | Sơ đồ bàn ăn | `waiter`, `manager` | Xem bàn dạng grid theo khu vực, trạng thái (Trống, Đang phục vụ, Chờ thanh toán), mở order hiện tại hoặc tạo order mới. |
 | `/orders/new` | Tạo đơn hàng mới | `waiter` | Chọn bàn, duyệt menu theo nhóm món, tìm kiếm, kiểm tra tồn kho, tạo giỏ hàng draft, gửi batch vào bếp an toàn. |
 | `/orders/[id]` | Chi tiết đơn hàng | `waiter`, `manager`, `kitchen` | Danh sách món theo batch, hủy món (modal xác nhận bắt buộc lý do), gửi thêm batch mới, theo dõi trạng thái. |
-| `/orders/[id]/invoice` | Hóa đơn mô phỏng | `waiter`, `manager` | Hóa đơn snapshot tên/đơn giá, hiển thị rõ dòng chữ mô phỏng, chốt đơn mô phỏng giải phóng bàn, in hóa đơn. |
+| `/orders/[id]/invoice` | Hóa đơn & QR Chuyển khoản | `waiter`, `manager` | Xem hóa đơn snapshot, hiển thị mã QR VietQR, sao chép STK/nội dung, nhân viên xác nhận thanh toán thủ công, chốt đơn giải phóng bàn, in ấn tối ưu CSS `@media print`. |
 | `/kitchen/queue` | Hàng đợi Bếp | `kitchen` | Queue sắp xếp theo `sent_at` tăng dần, thời gian chờ, cảnh báo >10 phút, nút thao tác lớn (Bắt đầu làm, Sẵn sàng). |
 | `/reports` | Báo cáo Quản trị | `manager` | Doanh thu các đơn CLOSED, số lượng đơn đã chốt, top món bán chạy theo số lượng, lọc theo khoảng ngày. |
 | `/admin/menu` | Quản trị Thực đơn | `manager` | Thêm/sửa món ăn, danh mục, cập nhật `stock_quantity` và ngưỡng cảnh báo sắp hết `low_stock_threshold`. |
@@ -108,7 +109,47 @@ Hệ thống khởi tạo sẵn tài khoản mẫu cho cả 3 vai trò (có th�
 
 ---
 
-## 6. Hướng dẫn Chạy Thử Local
+## 6. Cấu hình Mã QR Chuyển khoản VietQR & Quy trình Xác nhận Thủ công
+
+### 6.1. Biến môi trường cấu hình QR (`.env` / `.env.example`)
+Thêm các biến cấu hình tài khoản nhận tiền chuyển khoản vào file `.env`:
+
+```env
+# Mã định danh ngân hàng (BIN code theo chuẩn Napas/VietQR, ví dụ: 970436 cho Vietcombank, 970422 cho MBBank)
+PAYMENT_BANK_BIN=970436
+
+# Tên ngân hàng thụ hưởng hiển thị cho khách
+PAYMENT_BANK_NAME=Vietcombank
+
+# Số tài khoản ngân hàng thụ hưởng
+PAYMENT_ACCOUNT_NUMBER=1234567890
+
+# Tên chủ tài khoản ngân hàng thụ hưởng (viết hoa không dấu)
+PAYMENT_ACCOUNT_NAME=NHA HANG SMART RESTAURANT
+
+# Bật/tắt tính năng QR chuyển khoản trên hóa đơn
+PAYMENT_QR_ENABLED=true
+```
+
+> 🔒 **Quy tắc bảo mật & an toàn dữ liệu:**
+> - **Không hard-code** thông tin tài khoản thật vào mã nguồn repository.
+> - **Không lưu** dữ liệu nhạy cảm (mật khẩu ngân hàng, mã PIN, số thẻ thanh toán).
+> - **Tổng tiền tạo QR** (`amount`) bắt buộc do Server tính toán trực tiếp từ cơ sở dữ liệu (`total_amount` snapshot), tuyệt đối **không nhận tiền từ client** để ngăn ngừa gian lận.
+> - **Cơ chế Fallback an toàn:** Nếu thiếu biến môi trường hoặc `PAYMENT_QR_ENABLED=false`, giao diện hóa đơn sẽ hiển thị thông báo nhẹ nhàng: *"Chưa cấu hình thông tin QR chuyển khoản."* mà không làm crash ứng dụng.
+
+### 6.2. Quy trình Xác nhận Thanh toán Thủ công & Chốt đơn
+- **Bản chất tính năng:** Đây là hệ thống QR chuyển khoản mô phỏng/thủ công phục vụ đề tài nghiên cứu. Hệ thống **chưa tích hợp Webhook ngân hàng và chưa tự động xác nhận giao dịch**.
+- **Quy trình vận hành:**
+  1. Khách hàng quét mã QR trên màn hình hoặc hóa đơn in (nội dung chuyển khoản tự động gắn mã order, ví dụ: `THANHTOAN ORD-20261026-A12B`).
+  2. Khách hàng thực hiện chuyển khoản trên ứng dụng ngân hàng.
+  3. Nhân viên phục vụ (`waiter`) hoặc Quản lý (`manager`) kiểm tra biến động số dư thực tế, sau đó bấm nút: **"Đã kiểm tra và nhận chuyển khoản"**.
+  4. Hệ thống cập nhật `payment_status = 'MANUALLY_CONFIRMED'`, lưu thời gian `payment_confirmed_at`, người xác nhận `payment_confirmed_by` và ghi nhận nhật ký `Audit Log`.
+  5. Khi đã xác nhận thanh toán và tất cả món ăn chưa hủy đều đã sẵn sàng (`READY`), nhân viên mới có thể bấm **"Xác nhận chốt đơn mô phỏng"** để chuyển trạng thái order sang `CLOSED` và giải phóng bàn ăn về `AVAILABLE` (Trống).
+  6. Nếu chưa xác nhận thanh toán, hệ thống chặn chốt đơn với mã lỗi `PAYMENT_NOT_CONFIRMED` (HTTP 400).
+
+---
+
+## 7. Hướng dẫn Chạy Thử Local
 
 ### Cách 1: Chạy trực tiếp bằng Node.js & npm (Khuyên dùng - Zero Config)
 
@@ -144,31 +185,50 @@ docker compose ps
 
 ---
 
-## 7. Chạy Bộ Kiểm thử Nghiệp vụ (Automated Tests)
+## 8. Chạy Bộ Kiểm thử Toàn diện (Automated Tests)
 
-Chạy bộ 16 bài kiểm thử tự động kiểm tra 100% các tiêu chí bắt buộc theo đặc tả hệ thống:
+Chạy bộ kiểm thử tự động toàn diện kiểm tra 100% các tiêu chí bắt buộc theo đặc tả hệ thống:
 
 ```bash
 npm run test
 ```
 
-### Các tiêu chí được kiểm thử tự động:
-1. Xác thực mật khẩu Bcrypt và ký/giải mã token JWT.
-2. Phân quyền chặt chẽ trên API: Phục vụ không sửa được Menu (403), Bếp không xem được Báo cáo (403), Phục vụ không vào được Queue Bếp (403).
-3. Phân loại trạng thái tồn kho: 0 (Hết hàng), 1-4 (Sắp hết), >=5 (Bình thường).
-4. Tạo order theo bàn và chống tạo 2 order mở trên cùng một bàn.
-5. Snapshot giá và tên món ăn: bảo toàn dữ liệu hóa đơn cũ khi Menu cập nhật giá mới.
-6. Trừ kho nguyên tử khi gửi batch và Idempotency key chống trừ lặp khi retry.
-7. Hủy món `SENT_TO_KITCHEN` trước khi bếp nấu: hoàn kho đúng một lần và ghi sổ cái `inventory_ledger`.
-8. Chặn tuyệt đối không cho hủy món khi bếp đã chuyển sang `IN_PROGRESS` hoặc `READY`.
-9. Hàng đợi bếp sắp xếp đúng theo `sent_at` tăng dần (batch gửi trước lên trước, không căn cứ vào lúc tạo order).
-10. Cảnh báo quá 10 phút: tại đúng mốc 10 phút chưa cảnh báo, chỉ cảnh báo khi `now - sent_at > 10 phút` (> 600s).
-11. Chốt đơn mô phỏng: kiểm tra toàn bộ món đã READY và tự động giải phóng bàn về `AVAILABLE` (Trống).
-12. Báo cáo doanh thu: chỉ tính các đơn hàng đã `CLOSED`, món hủy không tính vào doanh thu.
+### Chi tiết các bộ test tự động:
+1. **Bộ kiểm thử cốt lõi (`tests/run-all.ts`):**
+   - Xác thực mật khẩu Bcrypt và ký/giải mã token JWT.
+   - Phân quyền chặt chẽ trên API: Phục vụ không sửa được Menu (403), Bếp không xem được Báo cáo (403), Phục vụ không vào được Queue Bếp (403).
+   - Phân loại trạng thái tồn kho: 0 (Hết hàng), 1-4 (Sắp hết), >=5 (Bình thường).
+   - Tạo order theo bàn và chống tạo 2 order mở trên cùng một bàn.
+   - Snapshot giá và tên món ăn: bảo toàn dữ liệu hóa đơn cũ khi Menu cập nhật giá mới.
+   - Trừ kho nguyên tử khi gửi batch và Idempotency key chống trừ lặp khi retry.
+   - Hủy món `SENT_TO_KITCHEN` trước khi bếp nấu: hoàn kho đúng một lần và ghi sổ cái `inventory_ledger`.
+   - Chặn tuyệt đối không cho hủy món khi bếp đã chuyển sang `IN_PROGRESS` hoặc `READY`.
+   - Hàng đợi bếp sắp xếp đúng theo `sent_at` tăng dần.
+   - Cảnh báo quá 10 phút: tại đúng mốc 10 phút chưa cảnh báo, chỉ cảnh báo khi `now - sent_at > 10 phút`.
+   - Chốt đơn mô phỏng: kiểm tra toàn bộ món đã READY và tự động giải phóng bàn về `AVAILABLE`.
+   - Báo cáo doanh thu: chỉ tính các đơn hàng đã `CLOSED`.
+
+2. **Bộ kiểm thử tương tranh & Idempotency (`tests/concurrency-api.test.ts`):**
+   - Hai Waiter cùng gửi order trên một bàn đồng thời qua API: 1 Thành công (201), 1 Xung đột (409).
+   - Hai Batch cùng tranh chấp trừ tồn kho qua API: Trừ kho nguyên tử an toàn, không bao giờ âm kho.
+   - Thử lại (Retry) request qua API với Idempotency Key: Replay an toàn (200), không trừ kho 2 lần.
+   - Hủy món đồng thời với Bếp chuyển sang `IN_PROGRESS`: Loại trừ lẫn nhau, không bao giờ hủy món đang nấu.
+
+3. **Bộ kiểm thử thanh toán QR & xác nhận thủ công (`tests/payment-qr.test.ts`):**
+   - **Test 1:** Order trả đúng số tiền server đã tính khi tạo QR.
+   - **Test 2:** Nội dung chuyển khoản chứa đúng mã order (`THANHTOAN <orderCode>`).
+   - **Test 3:** QR không tạo từ giá trị tiền do client gửi (chống gian lận giá).
+   - **Test 4:** Nhân viên phục vụ (`waiter`) có thể xác nhận thanh toán thủ công.
+   - **Test 5:** Nhân viên bếp (`kitchen`) không thể xác nhận thanh toán (bị chặn 403 Forbidden).
+   - **Test 6:** Phục vụ / Quản lý có thể chốt đơn và giải phóng bàn sau khi đã xác nhận thanh toán.
+   - **Test 7:** Hệ thống chặn tuyệt đối không cho chốt đơn nếu chưa xác nhận thanh toán (báo lỗi 400 `PAYMENT_NOT_CONFIRMED`).
+   - **Test 8:** Retry xác nhận thanh toán không ghi nhận lặp (cơ chế Idempotency).
+   - **Test 9:** Mã QR và thông tin chuyển khoản xuất hiện đầy đủ khi in hóa đơn (`@media print` và disclaimer bắt buộc).
+   - **Test 10:** Thiếu cấu hình biến môi trường QR không làm trang hóa đơn bị lỗi (Graceful Fallback).
 
 ---
 
-## 8. Hướng dẫn Triển khai lên AWS (EC2 + RDS + S3 + CloudWatch)
+## 9. Hướng dẫn Triển khai lên AWS (EC2 + RDS + S3 + CloudWatch)
 
 ### Bước 1: Tạo VPC và Mạng Subnet
 - Tạo 1 VPC `10.0.0.0/16`.
@@ -220,11 +280,16 @@ npm run test
    sudo cp nginx.conf /etc/nginx/nginx.conf
    sudo nginx -t && sudo systemctl reload nginx
    ```
-6. Cấu hình file `.env` với URL kết nối RDS PostgreSQL:
+6. Cấu hình file `.env` với URL kết nối RDS PostgreSQL và các biến thanh toán QR:
    ```env
    DATABASE_URL="postgresql://postgres:YOUR_RDS_PASSWORD@YOUR_RDS_ENDPOINT:5432/smart_restaurant?schema=public"
    JWT_SECRET="YOUR_STRONG_RANDOM_SECRET_KEY"
    NODE_ENV="production"
+   PAYMENT_BANK_BIN=970436
+   PAYMENT_BANK_NAME=Vietcombank
+   PAYMENT_ACCOUNT_NUMBER=1234567890
+   PAYMENT_ACCOUNT_NAME=NHA HANG SMART RESTAURANT
+   PAYMENT_QR_ENABLED=true
    ```
 7. Khởi động ứng dụng bằng Docker:
    ```bash
@@ -238,7 +303,7 @@ npm run test
 
 ---
 
-## 9. Hướng dẫn Sao lưu & Khôi phục (Backup & Restore)
+## 10. Hướng dẫn Sao lưu & Khôi phục (Backup & Restore)
 
 Hệ thống cung cấp sẵn các script tự động trong thư mục `scripts/`:
 
@@ -266,20 +331,35 @@ Hệ thống cung cấp sẵn các script tự động trong thư mục `scripts
 
 ---
 
-## 10. Kịch bản Diễn tập Demo Toàn diện
+## 11. Kịch bản Diễn tập Demo Toàn diện (Bao gồm Thanh toán QR Thủ công)
 
-1. **Bước 1 (Đăng nhập Phục vụ):** Truy cập `/login`, chọn tài khoản **waiter**. Chứng minh tài khoản không thấy các tab quản trị menu/báo cáo.
+1. **Bước 1 (Đăng nhập Phục vụ):** Truy cập `/login`, chọn tài khoản **waiter**. Chứng minh tài khoản không thấy các tab quản trị menu/báo cáo của Quản lý.
 2. **Bước 2 (Mở đơn theo bàn):** Vào `/tables`, chọn Bàn 01 (Trống). Chọn các món còn hàng trên thực đơn (ví dụ: Bò Wagyu, Súp bào ngư). Nhấn **Gửi vào bếp ngay**.
 3. **Bước 3 (Gửi bếp & Trừ kho):** Server thực thi transaction trừ kho nguyên tử, ghi sổ cái `inventory_ledger` và tạo `kitchen_batch`.
-4. **Bước 4 (Đăng nhập Bếp):** Mở cửa sổ ẩn danh mới hoặc đăng nhập tài khoản **kitchen**. Vào `/kitchen/queue`. Xác nhận batch mới xuất hiện, sắp xếp theo `sent_at`.
-5. **Bước 5 (Cảnh báo quá 10 phút):** Quan sát batch mẫu có thời gian gửi > 10 phút hiển thị viền đỏ cảnh báo và nhãn cảnh báo trên từng món.
+4. **Bước 4 (Đăng nhập Bếp):** Mở cửa sổ trình duyệt khác hoặc đăng nhập tài khoản **kitchen**. Vào `/kitchen/queue`. Xác nhận batch mới xuất hiện, sắp xếp theo `sent_at`.
+5. **Bước 5 (Cảnh báo quá 10 phút):** Quan sát batch có thời gian gửi > 10 phút hiển thị viền đỏ cảnh báo và nhãn cảnh báo trên từng món.
 6. **Bước 6 (Bếp cập nhật món):** Bấm **Bắt đầu làm** (`IN_PROGRESS`), sau đó bấm **Sẵn sàng phục vụ** (`READY`).
-7. **Bước 7 (Hóa đơn & Chốt đơn):** Quay lại màn hình của **waiter**, mở `/orders/[id]/invoice`. Xem hóa đơn với giá snapshot và dòng chữ bắt buộc *"Hóa đơn mô phỏng – không thực hiện thanh toán thật"*. Nhấn **Xác nhận chốt đơn mô phỏng**. Bàn 01 tự động chuyển về trạng thái Trống.
-8. **Bước 8 (Đăng nhập Quản lý):** Đăng nhập tài khoản **manager**. Mở `/reports` xem tổng doanh thu các đơn đã chốt và danh sách món bán chạy. Mở `/admin/audit-log` xem lịch sử toàn bộ các bước vừa thực hiện.
+7. **Bước 7 (Hóa đơn & Quét mã QR VietQR):**
+   - Quay lại màn hình của **waiter**, mở `/orders/[id]/invoice`.
+   - Quan sát khu vực **"Thanh toán chuyển khoản"**:
+     - Mã QR VietQR kích thước lớn, sắc nét, có thể quét trực tiếp bằng camera điện thoại hoặc ứng dụng ngân hàng.
+     - Thông tin ngân hàng: Ngân hàng Vietcombank, Số tài khoản, Chủ tài khoản, Số tiền cần chuyển (tính từ server snapshot).
+     - Nội dung chuyển khoản theo đúng mã đơn hàng, ví dụ: `THANHTOAN ORD-xxxx`.
+     - Bấm thử các nút **"Sao chép"** số tài khoản và nội dung chuyển khoản (hiển thị trạng thái "Đã chép").
+     - Quan sát huy hiệu trạng thái: **"Chờ xác nhận chuyển khoản"** (màu vàng cam).
+     - Quan sát dòng cảnh báo bắt buộc: *"Hệ thống chưa tự động xác nhận giao dịch. Nhân viên phục vụ cần kiểm tra giao dịch trước khi chốt đơn."*
+8. **Bước 8 (Xác nhận nhận chuyển khoản thủ công):**
+   - Nếu cố bấm chốt đơn khi chưa xác nhận, hệ thống từ chối cho phép chốt.
+   - Waiter kiểm tra biến động số dư và nhấn nút **"Đã kiểm tra và nhận chuyển khoản"**.
+   - Trạng thái chuyển sang huy hiệu màu xanh: **"Đã xác nhận chuyển khoản"** (kèm tên người xác nhận và thời gian).
+9. **Bước 9 (Chốt đơn mô phỏng & In hóa đơn):**
+   - Nhấn **"Xác nhận chốt đơn mô phỏng"**. Bàn 01 tự động chuyển về trạng thái Trống (`AVAILABLE`).
+   - Bấm nút **"In hóa đơn"**: Mở hộp thoại in trình duyệt, kiểm tra bản in chuẩn CSS `@media print` — mã QR và thông tin chuyển khoản xuất hiện đầy đủ, các nút bấm thao tác và navbar được ẩn, hiển thị dòng cam kết: *"Hóa đơn mô phỏng – không thực hiện thanh toán tự động."*
+10. **Bước 10 (Đăng nhập Quản lý & Audit Log):** Đăng nhập tài khoản **manager**. Mở `/reports` xem tổng doanh thu các đơn đã chốt và danh sách món bán chạy. Mở `/admin/audit-log` xem lịch sử toàn bộ các bước vừa thực hiện (bao gồm hành động `CONFIRM_PAYMENT` và `CLOSE_ORDER`).
 
 ---
 
-## 11. Checklist Dọn dẹp Tài nguyên Cloud (Cleanup) Sau Demo
+## 12. Checklist Dọn dẹp Tài nguyên Cloud (Cleanup) Sau Demo
 
 Để tránh phát sinh chi phí ngoài ý muốn sau khi hoàn thành buổi bảo vệ / demo:
 - [ ] Dừng hoặc Xóa EC2 Instance (`Terminate instance`).

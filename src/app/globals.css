@@ -3,18 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --background: #0b0f19;
-  --foreground: #f8fafc;
-  --card: #111827;
-  --card-foreground: #f8fafc;
-  --primary: #f59e0b;
-  --primary-foreground: #0b0f19;
-  --border: #1e293b;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: #ea580c;
+  --primary-foreground: #ffffff;
+  --border: #e2e8f0;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: #0f172a;
+  background-color: #f8fafc;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-tap-highlight-color: transparent;
   min-height: 100vh;
@@ -29,40 +29,40 @@ body {
   justify-content: center;
 }
 
-/* Hiệu ứng Glassmorphism sang trọng cao cấp */
+/* Hiệu ứng Glassmorphism & Card tươi sáng, tinh tế */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.78);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
 }
 
 .glass-card {
-  background: rgba(15, 23, 42, 0.65);
+  background: #ffffff;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.25);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar thanh lịch, hiện đại */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #94a3b8;
 }
 
 /* Hiệu ứng dải món ăn chạy mượt mà (Marquee) */
@@ -80,3 +80,245 @@ body {
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+/* ==========================================================================
+   TƯƠI SÁNG & SANG TRỌNG: Light Theme Overrides cho toàn bộ ứng dụng
+   ========================================================================== */
+
+/* Nền trang & Container chính */
+.bg-slate-950 {
+  background-color: #f8fafc !important;
+}
+
+/* Card & Bảng thông tin màu trắng tinh tế */
+.bg-slate-900 {
+  background-color: #ffffff !important;
+}
+
+.bg-slate-900\/60,
+.bg-slate-900\/70,
+.bg-slate-900\/80,
+.bg-slate-900\/90,
+.bg-slate-900\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Khung phụ, Input nền, Pill badges */
+.bg-slate-800 {
+  background-color: #f1f5f9 !important;
+}
+
+.bg-slate-800\/60,
+.bg-slate-800\/70,
+.bg-slate-800\/80 {
+  background-color: #f8fafc !important;
+}
+
+.bg-slate-700 {
+  background-color: #e2e8f0 !important;
+}
+
+/* Viền phân cách mỏng, sắc nét */
+.border-slate-900,
+.border-slate-800,
+.border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+
+.border-slate-800\/80,
+.border-slate-700\/80,
+.border-slate-700\/60 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Độ tương phản chữ (Typography) */
+.text-slate-100,
+.text-slate-200 {
+  color: #0f172a !important;
+}
+
+.text-slate-300 {
+  color: #334155 !important;
+}
+
+.text-slate-400 {
+  color: #64748b !important;
+}
+
+.text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+/* Chữ trong các nút hành động amber/orange */
+.text-slate-950 {
+  color: #ffffff !important;
+}
+
+/* Giữ màu trắng nổi bật cho chữ trên ảnh banner & nút bấm */
+.text-white {
+  color: #ffffff !important;
+}
+
+/* Ô nhập liệu Form (Inputs, Selects, Textareas) */
+input, select, textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #ea580c !important;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15) !important;
+}
+
+/* Nút hành động chính mang sắc cam tươi ngon, ấm áp */
+.bg-amber-500 {
+  background-color: #ea580c !important;
+  color: #ffffff !important;
+}
+
+.bg-amber-500:hover {
+  background-color: #c2410c !important;
+  color: #ffffff !important;
+}
+
+.hover\:bg-amber-600:hover {
+  background-color: #c2410c !important;
+  color: #ffffff !important;
+}
+
+.hover\:bg-amber-700:hover {
+  background-color: #9a3412 !important;
+  color: #ffffff !important;
+}
+
+.text-amber-400,
+.text-amber-500 {
+  color: #ea580c !important;
+}
+
+.text-amber-300 {
+  color: #c2410c !important;
+}
+
+.bg-amber-500\/10,
+.bg-amber-500\/15,
+.bg-amber-500\/20 {
+  background-color: #fff7ed !important;
+  border-color: #fed7aa !important;
+}
+
+/* Badge trạng thái bàn & trạng thái đơn hàng (Tươi sáng, dịu mắt) */
+.bg-emerald-500\/10,
+.bg-emerald-500\/20 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.text-emerald-400,
+.text-emerald-300 {
+  color: #047857 !important;
+}
+
+.bg-rose-500\/10,
+.bg-rose-500\/20,
+.bg-red-500\/10,
+.bg-red-500\/20 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+
+.text-rose-400,
+.text-rose-300,
+.text-red-400 {
+  color: #be123c !important;
+}
+
+.bg-purple-500\/10,
+.bg-purple-500\/20 {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+}
+
+.text-purple-400,
+.text-purple-300 {
+  color: #6b21a8 !important;
+}
+
+.bg-blue-500\/10,
+.bg-blue-500\/20 {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+}
+
+.text-blue-400 {
+  color: #1d4ed8 !important;
+}
+
+.bg-cyan-500\/10,
+.bg-cyan-500\/20 {
+  background-color: #ecfeff !important;
+  border-color: #a5f3fc !important;
+}
+
+.text-cyan-400,
+.text-cyan-300 {
+  color: #0e7490 !important;
+}
+
+.bg-pink-500\/10,
+.bg-pink-500\/20 {
+  background-color: #fdf2f8 !important;
+  border-color: #fbcfe8 !important;
+}
+
+.text-pink-400,
+.text-pink-300 {
+  color: #be185d !important;
+}
+
+.bg-yellow-500\/10,
+.bg-yellow-500\/20 {
+  background-color: #fefce8 !important;
+  border-color: #fde047 !important;
+}
+
+.text-yellow-300 {
+  color: #854d0e !important;
+}
+
+/* ==========================================================================
+   TỐI ƯU HÓA ĐƠN IN ẤN (@media print)
+   ========================================================================== */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+  }
+
+  nav,
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .glass-panel {
+    background: #ffffff !important;
+    border: 1px solid #cccccc !important;
+    box-shadow: none !important;
+    padding: 10px !important;
+  }
+
+  #invoice-qr-image {
+    max-width: 180px !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 auto !important;
+  }
+}
+

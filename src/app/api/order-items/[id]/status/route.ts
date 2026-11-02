@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb, withTransaction } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { salesChannelOrderService } from '@/lib/sales-channels/order-service';
 import crypto from 'crypto';
 
 export async function PATCH(
@@ -67,6 +68,23 @@ export async function PATCH(
         [targetStatus, item.id]
       );
 
+      // Đảm bảo actorId hợp lệ trong bảng users (chống lỗi FK)
+      let effectiveActorId = actor.userId;
+      const validActor = await tx.queryOne<{ id: string }>(
+        `SELECT id FROM users WHERE id = $1;`,
+        [effectiveActorId]
+      );
+      if (!validActor) {
+        const fallbackUser = await tx.queryOne<{ id: string }>(
+          `SELECT u.id FROM users u
+           JOIN user_roles ur ON u.id = ur.user_id
+           JOIN roles r ON ur.role_id = r.id
+           WHERE r.code IN ('kitchen', 'manager') AND u.is_active = TRUE
+           LIMIT 1;`
+        );
+        if (fallbackUser) effectiveActorId = fallbackUser.id;
+      }
+
       // Ghi lịch sử trạng thái món
       await tx.execute(
         `INSERT INTO order_status_history (id, order_id, order_item_id, from_status, to_status, changed_by, changed_at, note)
@@ -77,7 +95,7 @@ export async function PATCH(
           item.id,
           item.status,
           targetStatus,
-          actor.userId,
+          effectiveActorId,
           `Bếp cập nhật trạng thái món: ${item.status} -> ${targetStatus}`,
         ]
       );
@@ -134,6 +152,13 @@ export async function PATCH(
       ipAddress: ip,
     });
 
+    // 6. Đồng bộ trạng thái hai chiều sang GrabFood/ShopeeFood nếu là đơn giao hàng
+    try {
+      await salesChannelOrderService.handleKitchenStatusUpdate(result.orderId, targetStatus);
+    } catch (syncErr) {
+      console.warn('Lỗi đồng bộ trạng thái Bếp sang sàn:', syncErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: `Đã cập nhật trạng thái món '${result.itemName}' sang ${result.toStatus}.`,
@@ -142,6 +167,12 @@ export async function PATCH(
 
   } catch (error: any) {
     console.error('Lỗi API PATCH /api/order-items/[id]/status:', error);
+    if (error.code === 'ITEM_NOT_FOUND') {
+      return NextResponse.json(
+        { success: false, code: error.code, message: error.message },
+        { status: 404 }
+      );
+    }
     if (error.code === 'INVALID_TRANSITION' || error.code === 'INVALID_STATUS') {
       return NextResponse.json(
         { success: false, code: error.code, message: error.message },
@@ -149,7 +180,11 @@ export async function PATCH(
       );
     }
     return NextResponse.json(
-      { success: false, code: 'SERVER_ERROR', message: 'Lỗi máy chủ khi cập nhật trạng thái món.' },
+      {
+        success: false,
+        code: error.code || 'SERVER_ERROR',
+        message: error.message || 'Lỗi máy chủ khi cập nhật trạng thái món.',
+      },
       { status: 500 }
     );
   }

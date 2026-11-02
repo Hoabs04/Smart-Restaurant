@@ -33,6 +33,9 @@ interface KitchenBatch {
   orderCode: string;
   tableCode: string;
   areaName: string;
+  orderSource?: string;
+  channelOrderCode?: string | null;
+  isDelivery?: boolean;
   creatorName: string;
   sentAt: string;
   orderCreatedAt: string;
@@ -55,6 +58,11 @@ export default function KitchenQueuePage() {
     try {
       const res = await fetch('/api/kitchen/queue');
       const data = await res.json();
+
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
 
       if (res.status === 403) {
         window.location.href = '/unauthorized';
@@ -97,8 +105,13 @@ export default function KitchenQueuePage() {
 
       const data = await res.json();
 
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+
       if (!res.ok || !data.success) {
-        setSyncStatus('OFFLINE');
+        setSyncStatus('IDLE');
         setErrorMessage(data.message || 'Lỗi khi cập nhật trạng thái món.');
         setUpdatingItemId(null);
         return;
@@ -240,12 +253,27 @@ export default function KitchenQueuePage() {
                         <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-black flex items-center justify-center">
                           #{index + 1}
                         </span>
-                        <span className="text-base font-extrabold text-slate-100">
-                          {batch.tableCode}
-                        </span>
-                        <span className="text-xs text-slate-400 font-medium">
-                          ({batch.areaName})
-                        </span>
+                        {batch.isDelivery ? (
+                          <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide border flex items-center gap-1.5 ${
+                            batch.orderSource === 'GRABFOOD'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : batch.orderSource === 'SHOPEEFOOD'
+                              ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+                              : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                          }`}>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            {batch.orderSource} {batch.channelOrderCode ? `#${batch.channelOrderCode}` : ''}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-base font-extrabold text-slate-100">
+                              {batch.tableCode}
+                            </span>
+                            <span className="text-xs text-slate-400 font-medium">
+                              ({batch.areaName})
+                            </span>
+                          </>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
                         Batch #{batch.batchNumber} &bull; Đơn: <span className="font-mono text-slate-300">{batch.orderCode}</span>

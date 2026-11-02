@@ -10,10 +10,6 @@ import {
   BarChart3, 
   FileText, 
   ShieldCheck, 
-  Cloud, 
-  Database, 
-  HardDrive, 
-  Server,
   ArrowRight,
   LogIn
 } from 'lucide-react';
@@ -38,7 +34,7 @@ export default async function HomePage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-                Hệ thống Quản lý Nhà hàng Thông minh (AWS Cloud)
+                Hệ thống Quản lý Nhà hàng Thông minh
               </h1>
               <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
                 {session ? (
@@ -46,7 +42,7 @@ export default async function HomePage() {
                     Xin chào, <strong className="text-amber-400 font-semibold">{session.displayName}</strong> ({session.role.toUpperCase()}). Vui lòng chọn phân hệ làm việc bên dưới:
                   </>
                 ) : (
-                  'Kiến trúc Modular Monolith tối ưu cảm ứng Tablet-First, chạy cục bộ và triển khai trên hạ tầng Amazon Web Services.'
+                  'Kiến trúc Modular Monolith tối ưu cảm ứng Tablet-First, vận hành mượt mà và trực quan.'
                 )}
               </p>
             </div>
@@ -156,7 +152,7 @@ export default async function HomePage() {
                 <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all" />
               </div>
               <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                Ghi nhận chi tiết mọi thao tác gửi bếp, hủy món, chốt đơn, đăng nhập kèm IP và định dạng tương thích AWS CloudWatch.
+                Ghi nhận chi tiết mọi thao tác gửi bếp, hủy món, chốt đơn, đăng nhập kèm IP và thông tin bảo mật.
               </p>
             </Link>
 
@@ -179,52 +175,6 @@ export default async function HomePage() {
               </p>
             </Link>
 
-          </div>
-        </section>
-
-        {/* 3. THÔNG TIN HẠ TẦNG CLOUD AWS */}
-        <section className="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Cloud className="w-4 h-4 text-amber-500" />
-            <span>Kiến trúc Triển khai trên nền tảng Điện toán Đám mây Amazon Web Services</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-slate-400 flex items-center gap-1.5 mb-1">
-                <Server className="w-3.5 h-3.5 text-amber-500" />
-                <span>Compute</span>
-              </div>
-              <div className="font-bold text-slate-200">Amazon EC2 (Nginx)</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Docker Multi-stage runner</div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-slate-400 flex items-center gap-1.5 mb-1">
-                <Database className="w-3.5 h-3.5 text-blue-500" />
-                <span>Database</span>
-              </div>
-              <div className="font-bold text-slate-200">Amazon RDS PostgreSQL</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Private Subnet, Multi-AZ ready</div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-slate-400 flex items-center gap-1.5 mb-1">
-                <HardDrive className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Media Storage</span>
-              </div>
-              <div className="font-bold text-slate-200">Amazon S3 (Private)</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Block Public Access an toàn</div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-slate-400 flex items-center gap-1.5 mb-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />
-                <span>Observability</span>
-              </div>
-              <div className="font-bold text-slate-200">AWS CloudWatch Logs</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Structured JSON Audit Logging</div>
-            </div>
           </div>
         </section>
 

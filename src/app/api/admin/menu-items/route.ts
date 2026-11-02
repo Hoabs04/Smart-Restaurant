@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { salesChannelOrderService } from '@/lib/sales-channels/order-service';
 import crypto from 'crypto';
 
 export async function GET(req: NextRequest) {
@@ -145,6 +146,11 @@ export async function PUT(req: NextRequest) {
       details: { name: name.trim(), price: current_price, stock, threshold, isAvail },
     });
 
+    // Tự động đồng bộ trạng thái còn/hết món sang các kênh bán hàng (GrabFood, ShopeeFood)
+    salesChannelOrderService.syncMenuItemStock(id, stock, isAvail).catch(err => {
+      console.error(`Lỗi syncMenuItemStock cho món ${id}:`, err);
+    });
+
     return NextResponse.json({
       success: true,
       message: `Đã cập nhật món '${name}' thành công.`,
@@ -157,3 +163,90 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req, ['manager']);
+  if ('errorResponse' in auth) return auth.errorResponse;
+
+  const actor = auth.user;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    let id = searchParams.get('id');
+
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body.id;
+      } catch {}
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, code: 'INVALID_INPUT', message: 'Vui lòng cung cấp mã món ăn cần xóa.' },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDb();
+    const item = await db.queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM menu_items WHERE id = $1;`,
+      [id]
+    );
+
+    if (!item) {
+      return NextResponse.json(
+        { success: false, code: 'ITEM_NOT_FOUND', message: 'Không tìm thấy món ăn này.' },
+        { status: 404 }
+      );
+    }
+
+    // Kiểm tra xem món đã từng được order chưa
+    const refCountRow = await db.queryOne<{ count: string | number }>(
+      `SELECT COUNT(*) as count FROM order_items WHERE menu_item_id = $1;`,
+      [id]
+    );
+    const orderCount = Number(refCountRow?.count || 0);
+
+    let deletionType: 'HARD_DELETE' | 'SOFT_DELETE' = 'HARD_DELETE';
+    let message = '';
+
+    if (orderCount === 0) {
+      // Chưa từng có trong order nào -> Xóa cứng
+      await db.execute(`DELETE FROM menu_items WHERE id = $1;`, [id]);
+      deletionType = 'HARD_DELETE';
+      message = `Đã xóa vĩnh viễn món '${item.name}' khỏi thực đơn.`;
+    } else {
+      // Đã có trong order lịch sử -> Ngừng kinh doanh (availability = false)
+      await db.execute(
+        `UPDATE menu_items 
+         SET availability = false, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $1;`,
+        [id]
+      );
+      deletionType = 'SOFT_DELETE';
+      message = `Món '${item.name}' đã có trong ${orderCount} đơn hàng lịch sử. Hệ thống đã tắt trạng thái kinh doanh (ngừng bán) để bảo toàn báo cáo kế toán.`;
+    }
+
+    await logAudit({
+      actorId: actor.userId,
+      action: 'DELETE_MENU_ITEM',
+      entityType: 'MENU_ITEM',
+      entityId: id,
+      details: { name: item.name, deletionType, orderCount },
+    });
+
+    return NextResponse.json({
+      success: true,
+      deletionType,
+      message,
+    });
+  } catch (error: any) {
+    console.error('Lỗi API DELETE /api/admin/menu-items:', error);
+    return NextResponse.json(
+      { success: false, code: 'SERVER_ERROR', message: 'Lỗi khi xóa món ăn.' },
+      { status: 500 }
+    );
+  }
+}
+

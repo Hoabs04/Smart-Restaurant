@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb, withTransaction } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { salesChannelOrderService } from '@/lib/sales-channels/order-service';
 import crypto from 'crypto';
 
 export async function POST(
@@ -61,6 +62,8 @@ export async function POST(
     }
 
     // 2. Thực hiện toàn bộ quy trình gửi bếp trong một Transaction nguyên tử
+    const depletedMenuItemIds: string[] = [];
+
     const result = await withTransaction(async (tx) => {
       // Khóa và kiểm tra Order
       const order = await tx.queryOne<{
@@ -150,6 +153,11 @@ export async function POST(
 
       // 3. Trừ tồn kho từng món đúng số lượng
       for (const [mId, reqInfo] of quantityByMenuItem.entries()) {
+        const stockInfo = stockMap.get(mId);
+        if (stockInfo && stockInfo.stock_quantity - reqInfo.totalQty <= 0) {
+          depletedMenuItemIds.push(mId);
+        }
+
         await tx.execute(
           `UPDATE menu_items 
            SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP 
@@ -232,6 +240,13 @@ export async function POST(
         items: newItems.map(i => ({ id: i.id, name: i.item_name_snapshot, quantity: i.quantity })),
       };
     });
+
+    // 7.1. Tự động đồng bộ tắt món (HẾT MÓN) sang GrabFood/ShopeeFood cho các món chạm ngưỡng tồn kho = 0
+    for (const dId of depletedMenuItemIds) {
+      salesChannelOrderService.syncMenuItemStock(dId, 0, false).catch(err => {
+        console.error(`Lỗi đồng bộ hết món ${dId} sang sàn:`, err);
+      });
+    }
 
     // 8. Ghi Audit Log
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1';

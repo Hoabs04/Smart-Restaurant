@@ -29,9 +29,9 @@ async function seed() {
   const defaultPasswordHash = await bcrypt.hash('Restaurant@2026', 10);
 
   const users = [
-    { id: crypto.randomUUID(), username: 'manager', displayName: 'Nguyễn Văn Quản Lý', role: 'manager' },
-    { id: crypto.randomUUID(), username: 'waiter', displayName: 'Trần Thị Phục Vụ', role: 'waiter' },
-    { id: crypto.randomUUID(), username: 'kitchen', displayName: 'Lê Văn Đầu Bếp', role: 'kitchen' },
+    { id: 'c0000000-0000-0000-0000-000000000001', username: 'manager', displayName: 'Nguyễn Văn Quản Lý', role: 'manager' },
+    { id: 'c0000000-0000-0000-0000-000000000002', username: 'waiter', displayName: 'Trần Thị Phục Vụ', role: 'waiter' },
+    { id: 'c0000000-0000-0000-0000-000000000003', username: 'kitchen', displayName: 'Lê Văn Đầu Bếp', role: 'kitchen' },
   ];
 
   for (const u of users) {
@@ -160,8 +160,8 @@ async function seed() {
       const total = (wagyuItem.current_price * 2) + (supItem.current_price * 2);
       
       await db.execute(
-        `INSERT INTO orders (id, order_code, table_id, created_by, status, total_amount, created_at, closed_at)
-         VALUES ($1, 'ORD-DEMO-CLOSED-01', $2, $3, 'CLOSED', $4, CURRENT_TIMESTAMP - INTERVAL '2 hours', CURRENT_TIMESTAMP - INTERVAL '1 hours');`,
+        `INSERT INTO orders (id, order_code, table_id, created_by, status, total_amount, payment_method, payment_status, payment_confirmed_at, payment_confirmed_by, payment_reference, created_at, closed_at)
+         VALUES ($1, 'ORD-DEMO-CLOSED-01', $2, $3, 'CLOSED', $4, 'TRANSFER', 'MANUALLY_CONFIRMED', CURRENT_TIMESTAMP - INTERVAL '1 hours', $3, 'REF-DEMO-SEED-01', CURRENT_TIMESTAMP - INTERVAL '2 hours', CURRENT_TIMESTAMP - INTERVAL '1 hours');`,
         [orderId, table1.id, waiter.id, total]
       );
 

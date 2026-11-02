@@ -17,7 +17,8 @@ import {
   Plus, 
   RefreshCw,
   X,
-  FileCheck
+  FileCheck,
+  QrCode
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
@@ -77,6 +78,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [cancelModalItem, setCancelModalItem] = useState<OrderItem | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Modal Hủy toàn bộ đơn hàng
+  const [cancelOrderModalOpen, setCancelOrderModalOpen] = useState(false);
+  const [orderCancelReason, setOrderCancelReason] = useState('');
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
 
   // Gửi batch món mới vào bếp
   const [isSendingBatch, setIsSendingBatch] = useState(false);
@@ -175,7 +181,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!res.ok || !data.success) {
         setErrorMessage(data.message || 'Lỗi khi hủy món ăn.');
       } else {
-        setActionSuccess(`Đã hủy món '${cancelModalItem.itemName}' thành công.`);
+        const msg = data.data?.orderAutoClosed
+          ? `Đã hủy món '${cancelModalItem.itemName}' thành công. Toàn bộ món đã hủy: Đơn hàng đã tự động chốt và giải phóng bàn ăn.`
+          : `Đã hủy món '${cancelModalItem.itemName}' thành công.`;
+        setActionSuccess(msg);
         setCancelModalItem(null);
         setCancelReason('');
         await fetchOrderDetail();
@@ -184,6 +193,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setErrorMessage('Lỗi mạng khi thực hiện hủy món.');
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  // Xác nhận HỦY TOÀN BỘ ĐƠN HÀNG
+  const handleConfirmCancelOrder = async () => {
+    if (!order || !orderCancelReason.trim()) {
+      alert('Vui lòng nhập lý do hủy đơn hàng.');
+      return;
+    }
+
+    setIsCancellingOrder(true);
+    setErrorMessage('');
+    setActionSuccess('');
+
+    try {
+      const res = await fetch(`/api/orders/${order.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancel_reason: orderCancelReason.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.message || 'Lỗi khi hủy đơn hàng.');
+      } else {
+        setActionSuccess(data.message || 'Đã hủy toàn bộ đơn hàng và giải phóng bàn ăn thành công.');
+        setCancelOrderModalOpen(false);
+        setOrderCancelReason('');
+        await fetchOrderDetail();
+      }
+    } catch {
+      setErrorMessage('Lỗi mạng khi thực hiện hủy đơn hàng.');
+    } finally {
+      setIsCancellingOrder(false);
     }
   };
 
@@ -325,6 +369,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <RefreshCw className="w-4 h-4" />
             </button>
 
+            {/* Nút Xem trang khách theo dõi */}
+            <Link
+              href={`/track/table/${encodeURIComponent(order.tableCode)}`}
+              target="_blank"
+              title="Mở giao diện khách ngồi tại bàn theo dõi tiến độ"
+              className="touch-target px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs sm:text-sm border border-slate-800 transition-colors flex items-center gap-1.5"
+            >
+              <QrCode className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Khách theo dõi</span>
+            </Link>
+
             {/* Nút Thêm món mới */}
             {order.status !== 'CLOSED' && (
               <button
@@ -333,6 +388,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               >
                 <Plus className="w-4 h-4" />
                 <span>Thêm món</span>
+              </button>
+            )}
+
+            {/* Nút Hủy toàn bộ đơn hàng */}
+            {order.status !== 'CLOSED' && (
+              <button
+                onClick={() => setCancelOrderModalOpen(true)}
+                className="touch-target px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-xs sm:text-sm border border-red-500/30 transition-colors flex items-center gap-1.5"
+                title="Hủy toàn bộ đơn hàng và giải phóng bàn ăn"
+              >
+                <Ban className="w-4 h-4" />
+                <span>Hủy đơn</span>
               </button>
             )}
 
@@ -663,6 +730,79 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 className="touch-target px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm shadow-md"
               >
                 {isAddingItems ? 'Đang thêm...' : 'Lưu món vào đơn'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HỦY TOÀN BỘ ĐƠN HÀNG */}
+      {cancelOrderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="max-w-md w-full glass-panel rounded-2xl p-6 border border-slate-700 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <h3 className="font-bold text-slate-100 text-base flex items-center gap-2 text-red-400">
+                <Ban className="w-5 h-5" />
+                Hủy toàn bộ đơn hàng {order.orderCode}
+              </h3>
+              <button
+                onClick={() => {
+                  setCancelOrderModalOpen(false);
+                  setOrderCancelReason('');
+                }}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-300 mb-4">
+              Bạn có chắc chắn muốn hủy toàn bộ đơn hàng <strong className="text-amber-400">{order.orderCode}</strong> cho bàn <strong className="text-amber-400">{order.tableCode}</strong>?
+            </p>
+
+            <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20 text-xs text-red-300 space-y-1 mb-4">
+              <div>&bull; Toàn bộ món trong đơn sẽ chuyển sang trạng thái <strong>ĐÃ HỦY</strong>.</div>
+              <div>&bull; Các món đã gửi bếp sẽ được <strong>hoàn lại tồn kho</strong> tự động.</div>
+              <div>&bull; Bàn {order.tableCode} sẽ được <strong>giải phóng về trạng thái Trống (AVAILABLE)</strong>.</div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Lý do hủy đơn hàng <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={orderCancelReason}
+                onChange={e => setOrderCancelReason(e.target.value)}
+                placeholder="Ví dụ: Khách đổi ý rời quán, đặt nhầm bàn, khách bận việc đột xuất..."
+                className="w-full h-24 p-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-red-500 transition-colors resize-none placeholder:text-slate-600"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelOrderModalOpen(false);
+                  setOrderCancelReason('');
+                }}
+                className="touch-target px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium text-sm hover:bg-slate-700"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingOrder || !orderCancelReason.trim()}
+                onClick={handleConfirmCancelOrder}
+                className="touch-target px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-md disabled:opacity-50 flex items-center gap-2"
+              >
+                {isCancellingOrder ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang hủy...</span>
+                  </>
+                ) : (
+                  <span>Xác nhận hủy đơn</span>
+                )}
               </button>
             </div>
           </div>

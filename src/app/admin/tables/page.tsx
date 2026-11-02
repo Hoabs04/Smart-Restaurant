@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
+import AdminNavTabs from '@/components/admin/AdminNavTabs';
 import { 
   Grid, 
   Plus, 
@@ -114,6 +115,9 @@ export default function AdminTablesPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         
+        {/* SUB-NAVBAR CHUYỂN NHANH CÁC PHÂN HỆ QUẢN TRỊ */}
+        <AdminNavTabs />
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">

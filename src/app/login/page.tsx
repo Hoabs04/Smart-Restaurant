@@ -185,7 +185,7 @@ export default function LoginPage() {
 
         {/* Footer info */}
         <div className="text-center text-xs text-slate-500 mt-6">
-          Kiến trúc Modular Monolith &bull; Amazon RDS PostgreSQL &bull; Amazon EC2 Nginx &bull; Amazon S3
+          Kiến trúc Modular Monolith &bull; Tối ưu Tablet-First &bull; Bảo mật đa tầng
         </div>
       </div>
     </div>

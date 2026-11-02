@@ -4,8 +4,8 @@ import { getDb } from '@/lib/db';
 import { getWaitTimeSeconds, formatWaitTime, isOverdueWarning } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
-  // BẢO VỆ QUYỀN: Chỉ nhân viên bếp (kitchen) mới được truy cập Queue bếp!
-  const auth = await requireAuth(req, ['kitchen']);
+  // BẢO VỆ QUYỀN: Nhân viên bếp (kitchen), phục vụ (waiter) và quản lý (manager) đều có thể theo dõi tiến độ bếp
+  const auth = await requireAuth(req, ['kitchen', 'waiter', 'manager']);
   if ('errorResponse' in auth) return auth.errorResponse;
 
   try {
@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
       sent_at: string;
       order_id: string;
       order_code: string;
-      table_id: string;
+      order_source: string;
+      channel_order_id: string | null;
+      external_order_code: string | null;
+      table_id: string | null;
       table_code: string;
       area_name: string;
       order_created_at: string;
@@ -31,15 +34,19 @@ export async function GET(req: NextRequest) {
         kb.sent_at,
         o.id as order_id,
         o.order_code,
+        o.order_source,
+        o.channel_order_id,
+        eo.external_order_code,
         t.id as table_id,
-        t.table_code,
-        t.area_name,
+        COALESCE(t.table_code, o.order_source) as table_code,
+        COALESCE(t.area_name, 'Đơn Giao Hàng') as area_name,
         o.created_at as order_created_at,
-        u.display_name as creator_name
+        COALESCE(u.display_name, 'Hệ thống') as creator_name
       FROM kitchen_batches kb
       JOIN orders o ON kb.order_id = o.id
-      JOIN dining_tables t ON o.table_id = t.id
-      JOIN users u ON kb.created_by = u.id
+      LEFT JOIN dining_tables t ON o.table_id = t.id
+      LEFT JOIN external_orders eo ON o.channel_order_id = eo.id
+      LEFT JOIN users u ON kb.created_by = u.id
       JOIN order_items oi ON kb.id = oi.kitchen_batch_id
       WHERE oi.status IN ('SENT_TO_KITCHEN', 'IN_PROGRESS')
       ORDER BY kb.sent_at ASC;`
@@ -114,6 +121,9 @@ export async function GET(req: NextRequest) {
         orderCode: b.order_code,
         tableCode: b.table_code,
         areaName: b.area_name,
+        orderSource: b.order_source || 'DINE_IN',
+        channelOrderCode: b.external_order_code || null,
+        isDelivery: Boolean(b.order_source && b.order_source !== 'DINE_IN'),
         creatorName: b.creator_name,
         sentAt: b.sent_at,
         orderCreatedAt: b.order_created_at, // Trả về để client kiểm chứng queue KHÔNG dựa vào order_created_at

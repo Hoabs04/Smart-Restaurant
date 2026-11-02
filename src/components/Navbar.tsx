@@ -18,7 +18,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  Settings
+  Settings,
+  Store
 } from 'lucide-react';
 
 interface UserSession {
@@ -92,11 +93,11 @@ export default function Navbar() {
   const getRoleBadge = (role?: string) => {
     switch (role) {
       case 'manager':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1"><Shield className="w-3 h-3" /> Quản lý</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shadow-xs"><Shield className="w-3 h-3" /> Quản lý</span>;
       case 'waiter':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1"><UtensilsCrossed className="w-3 h-3" /> Phục vụ</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-xs"><UtensilsCrossed className="w-3 h-3" /> Phục vụ</span>;
       case 'kitchen':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><ChefHat className="w-3 h-3" /> Bếp</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shadow-xs"><ChefHat className="w-3 h-3" /> Bếp</span>;
       default:
         return null;
     }
@@ -106,6 +107,7 @@ export default function Navbar() {
   const mainNavLinks = [
     { href: '/', label: 'Trang chủ', icon: UtensilsCrossed, roles: ['waiter', 'kitchen', 'manager'] },
     { href: '/tables', label: 'Sơ đồ bàn', icon: Grid, roles: ['waiter', 'manager'] },
+    { href: '/admin/menu', label: 'Thực đơn & Thêm món', icon: BookOpen, roles: ['manager'] },
     { href: '/orders/new', label: 'Tạo đơn mới', icon: PlusCircle, roles: ['waiter'] },
     { href: '/kitchen/queue', label: 'Queue Bếp', icon: ChefHat, roles: ['kitchen'] },
     { href: '/reports', label: 'Báo cáo', icon: BarChart3, roles: ['manager'] },
@@ -113,7 +115,8 @@ export default function Navbar() {
 
   // Các mục quản trị gom nhóm cho Quản lý (Manager)
   const adminLinks = [
-    { href: '/admin/menu', label: 'Quản lý Menu', icon: BookOpen, desc: 'Món ăn & tồn kho' },
+    { href: '/admin/channels', label: 'Kênh bán hàng', icon: Store, desc: 'GrabFood, ShopeeFood' },
+    { href: '/admin/menu', label: 'Quản lý Menu & Thêm món', icon: BookOpen, desc: 'Thêm món, sửa giá & tồn kho' },
     { href: '/admin/tables', label: 'Quản lý Bàn', icon: Grid, desc: 'Khu vực & sơ đồ bàn' },
     { href: '/admin/users', label: 'Tài khoản', icon: Users, desc: 'Phân quyền nhân viên' },
     { href: '/admin/audit-log', label: 'Lịch sử thao tác', icon: FileText, desc: 'Nhật ký kiểm toán' },
@@ -133,22 +136,22 @@ export default function Navbar() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800 shadow-lg">
+      <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-amber-500/20">
+              <Link href="/" className="flex items-center gap-2.5 group">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform">
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-1.5">
+                  <div className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
                     SMART RESTAURANT
-                    <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">AWS MVP</span>
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">AWS MVP</span>
                   </div>
-                  <div className="text-[11px] text-slate-400 font-medium">Hệ thống quản lý nhà hàng thông minh</div>
+                  <div className="text-[11px] text-slate-500 font-medium">Hệ thống quản lý nhà hàng thông minh</div>
                 </div>
               </Link>
             </div>
@@ -162,10 +165,10 @@ export default function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
+                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
                       isActive
-                        ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20'
-                        : 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/60'
+                        ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -180,12 +183,12 @@ export default function Navbar() {
                   <button
                     type="button"
                     onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                       isAdminActive
-                        ? 'bg-amber-500 text-slate-950 font-semibold shadow-md shadow-amber-500/20'
+                        ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
                         : adminDropdownOpen
-                        ? 'bg-slate-800 text-slate-100'
-                        : 'text-slate-300 hover:text-slate-100 hover:bg-slate-800/60'
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                     }`}
                     aria-expanded={adminDropdownOpen}
                     aria-haspopup="true"
@@ -197,9 +200,9 @@ export default function Navbar() {
 
                   {/* Dropdown Menu */}
                   {adminDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800 mb-1 flex items-center gap-1.5">
-                        <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 mb-1 flex items-center gap-1.5">
+                        <Settings className="w-3.5 h-3.5 text-orange-600" />
                         <span>Khu vực Quản trị</span>
                       </div>
                       <div className="space-y-1">
@@ -213,16 +216,16 @@ export default function Navbar() {
                               onClick={() => setAdminDropdownOpen(false)}
                               className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors ${
                                 isActive
-                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+                                  ? 'bg-orange-50 text-orange-700 border border-orange-200 font-semibold'
+                                  : 'text-slate-700 hover:bg-slate-50 hover:text-orange-600'
                               }`}
                             >
-                              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                                 <Icon className="w-4 h-4" />
                               </div>
                               <div>
-                                <div className="text-sm font-semibold">{link.label}</div>
-                                <div className="text-[11px] text-slate-400">{link.desc}</div>
+                                <div className="text-sm font-bold">{link.label}</div>
+                                <div className="text-[11px] text-slate-500">{link.desc}</div>
                               </div>
                             </Link>
                           );
@@ -238,7 +241,7 @@ export default function Navbar() {
             <div className="hidden tablet:flex items-center gap-3">
               {user && (
                 <div className="text-right">
-                  <div className="text-sm font-semibold text-slate-200">{user.displayName}</div>
+                  <div className="text-sm font-bold text-slate-800">{user.displayName}</div>
                   <div className="flex items-center justify-end gap-1 mt-0.5">
                     {getRoleBadge(user.role)}
                   </div>
@@ -248,7 +251,7 @@ export default function Navbar() {
               <button
                 onClick={handleLogout}
                 title="Đăng xuất"
-                className="touch-target p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors border border-slate-700/60"
+                className="touch-target p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-slate-200 shadow-xs"
               >
                 <LogOut className="w-5 h-5" />
               </button>
@@ -258,7 +261,7 @@ export default function Navbar() {
             <div className="flex tablet:hidden items-center gap-2">
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="touch-target p-2 rounded-xl bg-slate-800 text-slate-300"
+                className="touch-target p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200"
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
@@ -269,12 +272,12 @@ export default function Navbar() {
 
         {/* Mobile dropdown menu */}
         {mobileMenuOpen && (
-          <div className="tablet:hidden border-t border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-3">
+          <div className="tablet:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 shadow-xl">
             {user && (
-              <div className="p-3 bg-slate-800/60 rounded-xl flex items-center justify-between">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                 <div>
-                  <div className="font-semibold text-slate-200 text-sm">{user.displayName}</div>
-                  <div className="text-xs text-slate-400">@{user.username}</div>
+                  <div className="font-bold text-slate-900 text-sm">{user.displayName}</div>
+                  <div className="text-xs text-slate-500">@{user.username}</div>
                 </div>
                 {getRoleBadge(user.role)}
               </div>
@@ -289,10 +292,10 @@ export default function Navbar() {
                     key={link.href}
                     href={link.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`touch-target w-full px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 ${
+                    className={`touch-target w-full px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-3 ${
                       isActive
-                        ? 'bg-amber-500 text-slate-950 font-semibold'
-                        : 'text-slate-300 hover:bg-slate-800'
+                        ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
+                        : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -304,9 +307,9 @@ export default function Navbar() {
 
             {/* Gom nhóm Quản trị trong mobile drawer */}
             {isManager && (
-              <div className="pt-2 border-t border-slate-800/80">
-                <div className="px-2 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <div className="pt-2 border-t border-slate-200">
+                <div className="px-2 mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-orange-600" />
                   <span>Khu vực Quản trị</span>
                 </div>
                 <div className="space-y-1">
@@ -318,15 +321,15 @@ export default function Navbar() {
                         key={link.href}
                         href={link.href}
                         onClick={() => setMobileMenuOpen(false)}
-                        className={`touch-target w-full px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-3 ${
+                        className={`touch-target w-full px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-3 ${
                           isActive
-                            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                            : 'text-slate-300 hover:bg-slate-800'
+                            ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                            : 'text-slate-700 hover:bg-slate-100'
                         }`}
                       >
-                        <Icon className="w-4 h-4 text-slate-400" />
+                        <Icon className="w-4 h-4 text-slate-500" />
                         <div>
-                          <div className="font-medium">{link.label}</div>
+                          <div className="font-bold">{link.label}</div>
                           <div className="text-[11px] text-slate-500">{link.desc}</div>
                         </div>
                       </Link>
@@ -338,7 +341,7 @@ export default function Navbar() {
 
             <button
               onClick={handleLogout}
-              className="touch-target w-full px-4 py-2.5 mt-2 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 flex items-center gap-3 border border-red-500/20"
+              className="touch-target w-full px-4 py-2.5 mt-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-3 border border-red-200"
             >
               <LogOut className="w-5 h-5" />
               <span>Đăng xuất</span>

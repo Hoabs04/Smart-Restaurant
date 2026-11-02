@@ -8,7 +8,9 @@ export type AuditAction =
   | 'CREATE_ORDER'
   | 'SEND_TO_KITCHEN'
   | 'CANCEL_ITEM'
+  | 'CANCEL_ORDER'
   | 'UPDATE_ITEM_STATUS'
+  | 'CONFIRM_PAYMENT'
   | 'CLOSE_ORDER'
   | 'CREATE_MENU_ITEM'
   | 'UPDATE_MENU_ITEM'
@@ -16,7 +18,9 @@ export type AuditAction =
   | 'CREATE_TABLE'
   | 'UPDATE_TABLE'
   | 'CREATE_USER'
-  | 'UPDATE_USER';
+  | 'UPDATE_USER'
+  | 'DELETE_USER'
+  | 'UPDATE_SALES_CHANNEL';
 
 export type EntityType =
   | 'AUTH'
@@ -25,7 +29,8 @@ export type EntityType =
   | 'KITCHEN_BATCH'
   | 'MENU_ITEM'
   | 'TABLE'
-  | 'USER';
+  | 'USER'
+  | 'SALES_CHANNEL';
 
 export interface AuditParams {
   actorId?: string | null;

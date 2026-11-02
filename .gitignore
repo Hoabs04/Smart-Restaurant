@@ -42,6 +42,10 @@ Thumbs.db
 
 # Embedded Local Database
 .db_pglite/
+.db_pglite_test/
+cookie.txt
 
 *.swp
 *.swo
+*.tsbuildinfo
+

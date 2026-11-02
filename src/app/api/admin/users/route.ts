@@ -9,6 +9,16 @@ export async function GET(req: NextRequest) {
   if ('errorResponse' in auth) return auth.errorResponse;
 
   try {
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get('status');
+
+    let whereClause = '';
+    if (status === 'active') {
+      whereClause = 'WHERE u.is_active = true';
+    } else if (status === 'resigned' || status === 'inactive') {
+      whereClause = 'WHERE u.is_active = false';
+    }
+
     const db = await getDb();
     const users = await db.query(
       `SELECT 
@@ -23,15 +33,34 @@ export async function GET(req: NextRequest) {
       FROM users u
       JOIN user_roles ur ON u.id = ur.user_id
       JOIN roles r ON ur.role_id = r.id
+      ${whereClause}
       ORDER BY u.created_at DESC;`
     );
 
     const roles = await db.query(`SELECT id, code, name FROM roles ORDER BY code ASC;`);
 
+    // Thống kê nhân sự
+    const statsRow = await db.queryOne<{
+      total: string | number;
+      active: string | number;
+      resigned: string | number;
+    }>(
+      `SELECT 
+        COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN is_active THEN 1 ELSE 0 END), 0) as active,
+        COALESCE(SUM(CASE WHEN NOT is_active THEN 1 ELSE 0 END), 0) as resigned
+       FROM users;`
+    );
+
     return NextResponse.json({
       success: true,
       users,
       roles,
+      stats: {
+        total: Number(statsRow?.total || 0),
+        active: Number(statsRow?.active || 0),
+        resigned: Number(statsRow?.resigned || 0),
+      },
     });
   } catch (error) {
     return NextResponse.json(
@@ -185,6 +214,170 @@ export async function PUT(req: NextRequest) {
     console.error('Lỗi API PUT /api/admin/users:', error);
     return NextResponse.json(
       { success: false, code: 'SERVER_ERROR', message: 'Lỗi khi cập nhật tài khoản.' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req, ['manager']);
+  if ('errorResponse' in auth) return auth.errorResponse;
+
+  const actor = auth.user;
+
+  try {
+    // Lấy id từ query param (?id=...) hoặc từ request body
+    const { searchParams } = new URL(req.url);
+    let targetId = searchParams.get('id');
+
+    if (!targetId) {
+      try {
+        const body = await req.json();
+        targetId = body.id;
+      } catch {}
+    }
+
+    if (!targetId) {
+      return NextResponse.json(
+        { success: false, code: 'INVALID_INPUT', message: 'Vui lòng cung cấp mã ID người dùng cần xóa.' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Không cho phép tự xóa tài khoản của chính mình
+    if (actor.userId === targetId) {
+      return NextResponse.json(
+        { success: false, code: 'CANNOT_DELETE_SELF', message: 'Bạn không thể tự xóa tài khoản của chính mình.' },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDb();
+
+    // 2. Kiểm tra tài khoản tồn tại
+    const targetUser = await db.queryOne<{
+      id: string;
+      username: string;
+      display_name: string;
+      is_active: boolean;
+      role_code: string;
+      role_name: string;
+    }>(
+      `SELECT u.id, u.username, u.display_name, u.is_active, r.code as role_code, r.name as role_name
+       FROM users u
+       LEFT JOIN user_roles ur ON u.id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.id
+       WHERE u.id = $1;`,
+      [targetId]
+    );
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, code: 'USER_NOT_FOUND', message: 'Không tìm thấy tài khoản người dùng.' },
+        { status: 404 }
+      );
+    }
+
+    // 3. Nếu là tài khoản Quản lý, kiểm tra xem còn ít nhất 1 Quản lý đang hoạt động khác không
+    if (targetUser.role_code === 'manager') {
+      const activeManagerCountRow = await db.queryOne<{ count: string | number }>(
+        `SELECT COUNT(*) as count 
+         FROM users u
+         JOIN user_roles ur ON u.id = ur.user_id
+         JOIN roles r ON ur.role_id = r.id
+         WHERE r.code = 'manager' AND u.is_active = true AND u.id != $1;`,
+        [targetId]
+      );
+      const remainingManagers = Number(activeManagerCountRow?.count || 0);
+      if (remainingManagers === 0) {
+        return NextResponse.json(
+          { success: false, code: 'LAST_MANAGER', message: 'Không thể xóa hoặc vô hiệu hóa Quản lý duy nhất đang hoạt động trong hệ thống.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 4. Kiểm tra các ràng buộc dữ liệu lịch sử
+    const refRow = await db.queryOne<{
+      orders_count: string | number;
+      batches_count: string | number;
+      ledger_count: string | number;
+      history_count: string | number;
+    }>(
+      `SELECT 
+        (SELECT COUNT(*) FROM orders WHERE created_by = $1 OR payment_confirmed_by = $1) as orders_count,
+        (SELECT COUNT(*) FROM kitchen_batches WHERE created_by = $1) as batches_count,
+        (SELECT COUNT(*) FROM inventory_ledger WHERE actor_id = $1) as ledger_count,
+        (SELECT COUNT(*) FROM order_status_history WHERE changed_by = $1) as history_count;`,
+      [targetId]
+    );
+
+    const ordersCount = Number(refRow?.orders_count || 0);
+    const batchesCount = Number(refRow?.batches_count || 0);
+    const ledgerCount = Number(refRow?.ledger_count || 0);
+    const historyCount = Number(refRow?.history_count || 0);
+    const hasHistoricalRecords = (ordersCount + batchesCount + ledgerCount + historyCount) > 0;
+
+    let deletionType: 'HARD_DELETE' | 'SOFT_DELETE' = 'HARD_DELETE';
+    let responseMessage = '';
+
+    if (!hasHistoricalRecords) {
+      // Chưa có dữ liệu ràng buộc -> Xóa cứng hoàn toàn khỏi CSDL
+      await db.execute(`DELETE FROM user_roles WHERE user_id = $1;`, [targetId]);
+      await db.execute(`DELETE FROM users WHERE id = $1;`, [targetId]);
+      deletionType = 'HARD_DELETE';
+      responseMessage = `Đã xóa hoàn toàn tài khoản '@${targetUser.username}' (${targetUser.display_name}) khỏi hệ thống.`;
+    } else {
+      // Đã có dữ liệu ràng buộc -> Vô hiệu hóa vĩnh viễn (Đã nghỉ việc), đổi password hash ngẫu nhiên không thể đăng nhập
+      const disabledPasswordHash = '!DISABLED!' + crypto.randomUUID();
+      await db.execute(
+        `UPDATE users 
+         SET is_active = false, 
+             password_hash = $1, 
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2;`,
+        [disabledPasswordHash, targetId]
+      );
+      deletionType = 'SOFT_DELETE';
+      responseMessage = `Tài khoản '@${targetUser.username}' đã có lịch sử nghiệp vụ (${ordersCount} đơn hàng, ${batchesCount} mẻ chuyển bếp). Hệ thống đã vô hiệu hóa vĩnh viễn và chuyển sang trạng thái 'Đã nghỉ việc' để bảo toàn dữ liệu kế toán & kiểm toán.`;
+    }
+
+    // 5. Ghi Audit Log
+    await logAudit({
+      actorId: actor.userId,
+      action: 'DELETE_USER',
+      entityType: 'USER',
+      entityId: targetId,
+      details: {
+        username: targetUser.username,
+        displayName: targetUser.display_name,
+        role: targetUser.role_code,
+        deletionType,
+        records: {
+          ordersCount,
+          batchesCount,
+          ledgerCount,
+          historyCount,
+        },
+        reason: 'Xóa tài khoản nhân viên không còn làm việc',
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      deletionType,
+      message: responseMessage,
+      user: {
+        id: targetId,
+        username: targetUser.username,
+        display_name: targetUser.display_name,
+        is_active: false,
+      },
+    });
+  } catch (error: any) {
+    console.error('Lỗi API DELETE /api/admin/users:', error);
+    return NextResponse.json(
+      { success: false, code: 'SERVER_ERROR', message: 'Lỗi khi xóa tài khoản nhân viên.' },
       { status: 500 }
     );
   }

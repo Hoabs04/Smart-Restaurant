@@ -62,10 +62,11 @@ export async function POST(
       const order = await tx.queryOne<{
         id: string;
         order_code: string;
+        table_id: string;
         status: string;
         total_amount: number;
       }>(
-        `SELECT id, order_code, status, total_amount 
+        `SELECT id, order_code, table_id, status, total_amount 
          FROM orders 
          WHERE id = $1 FOR UPDATE;`,
         [item.order_id]
@@ -137,18 +138,48 @@ export async function POST(
 
       const nonCancelledRemaining = remainingItems.filter(i => i.status !== 'CANCELLED');
       let newOrderStatus = order.status;
+      let orderAutoClosed = false;
 
-      if (nonCancelledRemaining.length > 0 && nonCancelledRemaining.every(i => i.status === 'READY')) {
-        // Nếu tất cả các món còn lại đều READY -> Chuyển sang READY_TO_CLOSE
-        newOrderStatus = 'READY_TO_CLOSE';
+      if (nonCancelledRemaining.length === 0) {
+        // Tất cả các món trong đơn hàng đã bị hủy:
+        // Đóng đơn (CLOSED) 0 đồng và giải phóng bàn ăn về AVAILABLE
+        newOrderStatus = 'CLOSED';
+        orderAutoClosed = true;
+
+        await tx.execute(
+          `UPDATE orders 
+           SET total_amount = 0, status = 'CLOSED', closed_at = CURRENT_TIMESTAMP, version = version + 1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1;`,
+          [item.order_id]
+        );
+
+        // Giải phóng bàn ăn: chuyển về AVAILABLE (Trống)
+        await tx.execute(
+          `UPDATE dining_tables 
+           SET status = 'AVAILABLE', version = version + 1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1;`,
+          [order.table_id]
+        );
+
+        // Ghi lịch sử Order
+        await tx.execute(
+          `INSERT INTO order_status_history (id, order_id, from_status, to_status, changed_by, changed_at, note)
+           VALUES ($1, $2, $3, 'CLOSED', $4, CURRENT_TIMESTAMP, 'Tất cả các món đã bị hủy. Đơn hàng tự động đóng (0đ) và giải phóng bàn ăn.');`,
+          [crypto.randomUUID(), item.order_id, order.status, actor.userId]
+        );
+      } else {
+        if (nonCancelledRemaining.every(i => i.status === 'READY')) {
+          // Nếu tất cả các món còn lại đều READY -> Chuyển sang READY_TO_CLOSE
+          newOrderStatus = 'READY_TO_CLOSE';
+        }
+
+        await tx.execute(
+          `UPDATE orders 
+           SET total_amount = $1, status = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $3;`,
+          [newTotal, newOrderStatus, item.order_id]
+        );
       }
-
-      await tx.execute(
-        `UPDATE orders 
-         SET total_amount = $1, status = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $3;`,
-        [newTotal, newOrderStatus, item.order_id]
-      );
 
       return {
         orderItemId: item.id,
@@ -158,9 +189,11 @@ export async function POST(
         previousStatus: item.status,
         quantity: item.quantity,
         restoredStock,
-        newOrderTotal: newTotal,
+        newOrderTotal: orderAutoClosed ? 0 : newTotal,
         newOrderStatus,
         cancelReason: cancel_reason.trim(),
+        orderAutoClosed,
+        tableReleased: orderAutoClosed,
       };
     });
 
@@ -182,9 +215,24 @@ export async function POST(
       ipAddress: ip,
     });
 
+    if (result.orderAutoClosed) {
+      await logAudit({
+        actorId: actor.userId,
+        action: 'CLOSE_ORDER',
+        entityType: 'ORDER',
+        entityId: result.orderId,
+        details: {
+          orderCode: result.orderCode,
+          totalAmount: 0,
+          notice: 'Đơn hàng tự động đóng và giải phóng bàn ăn do toàn bộ món đã bị hủy',
+        },
+        ipAddress: ip,
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Đã hủy món '${result.itemName}' thành công.${result.restoredStock ? ' Đã hoàn tồn kho đúng 1 lần.' : ''}`,
+      message: `Đã hủy món '${result.itemName}' thành công.${result.restoredStock ? ' Đã hoàn tồn kho đúng 1 lần.' : ''}${result.orderAutoClosed ? ' Toàn bộ món đã hủy: Đơn hàng đã tự động chốt và giải phóng bàn ăn.' : ''}`,
       data: result,
     });
 

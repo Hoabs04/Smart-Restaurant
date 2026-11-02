@@ -16,6 +16,13 @@ export async function POST(
   try {
     const { id: orderId } = await context.params;
 
+    let body: { bypassPaymentCheck?: boolean } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // Body rỗng được chấp nhận
+    }
+
     const result = await withTransaction(async (tx) => {
       // 1. Khóa và lấy thông tin Order
       const order = await tx.queryOne<{
@@ -24,9 +31,10 @@ export async function POST(
         table_id: string;
         status: string;
         total_amount: number;
+        payment_status: string | null;
         created_at: string;
       }>(
-        `SELECT id, order_code, table_id, status, total_amount, created_at 
+        `SELECT id, order_code, table_id, status, total_amount, payment_status, created_at 
          FROM orders 
          WHERE id = $1 FOR UPDATE;`,
         [orderId]
@@ -55,30 +63,37 @@ export async function POST(
       );
 
       const activeItems = items.filter(it => it.status !== 'CANCELLED');
-
-      // Nếu tất cả món bị hủy
-      if (activeItems.length === 0) {
-        throw {
-          code: 'ALL_ITEMS_CANCELLED',
-          message: 'Tất cả các món trong đơn hàng đã bị hủy. Đơn hàng không thể chốt theo luồng thông thường.',
-        };
-      }
-
-      // Kiểm tra xem có món nào chưa READY không
-      const notReadyItems = activeItems.filter(it => it.status !== 'READY');
-      if (notReadyItems.length > 0) {
-        const notReadyNames = notReadyItems.map(it => `${it.item_name_snapshot} (${it.status})`).join(', ');
-        throw {
-          code: 'ITEMS_NOT_READY',
-          message: `Chưa thể chốt đơn: Còn các món chưa sẵn sàng: ${notReadyNames}. Chỉ chốt khi tất cả món chưa hủy đều đã READY.`,
-        };
-      }
+      const isAllCancelled = activeItems.length === 0;
 
       // 3. Tính lại tổng tiền chính xác từ snapshot các món chưa hủy
-      const verifiedTotal = activeItems.reduce(
-        (sum, it) => sum + Number(it.unit_price_snapshot) * it.quantity,
-        0
-      );
+      const verifiedTotal = isAllCancelled
+        ? 0
+        : activeItems.reduce(
+            (sum, it) => sum + Number(it.unit_price_snapshot) * it.quantity,
+            0
+          );
+
+      // Kiểm tra xác nhận thanh toán trước khi chốt đơn:
+      // Nếu tổng tiền > 0: bắt buộc phải có xác nhận thanh toán (trừ khi có cờ bypass rõ ràng)
+      // Nếu đơn 0 đồng (do toàn bộ món đã hủy hoặc không có tiền): không yêu cầu xác nhận thanh toán
+      if (verifiedTotal > 0 && order.payment_status !== 'MANUALLY_CONFIRMED' && !body.bypassPaymentCheck) {
+        throw {
+          code: 'PAYMENT_NOT_CONFIRMED',
+          message: 'Chưa thể chốt đơn: Khách hàng chưa hoàn tất chuyển khoản hoặc nhân viên chưa xác nhận nhận tiền. Vui lòng bấm "Đã kiểm tra và nhận chuyển khoản" trước khi chốt đơn.',
+        };
+      }
+
+      // Kiểm tra xem có món nào chưa READY không (chỉ kiểm tra nếu còn món hoạt động)
+      if (!isAllCancelled) {
+        const notReadyItems = activeItems.filter(it => it.status !== 'READY');
+        if (notReadyItems.length > 0) {
+          const notReadyNames = notReadyItems.map(it => `${it.item_name_snapshot} (${it.status})`).join(', ');
+          throw {
+            code: 'ITEMS_NOT_READY',
+            message: `Chưa thể chốt đơn: Còn các món chưa sẵn sàng: ${notReadyNames}. Chỉ chốt khi tất cả món chưa hủy đều đã READY.`,
+          };
+        }
+      }
 
       // 4. Chốt đơn hàng: chuyển status sang CLOSED
       await tx.execute(
@@ -97,10 +112,13 @@ export async function POST(
       );
 
       // 6. Ghi lịch sử Order
+      const closeNote = isAllCancelled
+        ? 'Chốt đơn 0 đồng (toàn bộ món đã hủy) và giải phóng bàn ăn'
+        : 'Chốt đơn mô phỏng và giải phóng bàn ăn';
       await tx.execute(
         `INSERT INTO order_status_history (id, order_id, from_status, to_status, changed_by, changed_at, note)
-         VALUES ($1, $2, $3, 'CLOSED', $4, CURRENT_TIMESTAMP, 'Chốt đơn mô phỏng và giải phóng bàn ăn');`,
-        [crypto.randomUUID(), orderId, order.status, actor.userId]
+         VALUES ($1, $2, $3, 'CLOSED', $4, CURRENT_TIMESTAMP, $5);`,
+        [crypto.randomUUID(), orderId, order.status, actor.userId, closeNote]
       );
 
       // Lấy thông tin bàn
@@ -117,7 +135,10 @@ export async function POST(
         totalAmount: verifiedTotal,
         closedAt: new Date().toISOString(),
         itemCount: activeItems.length,
-        notice: 'Hóa đơn mô phỏng – không thực hiện thanh toán thật',
+        isAllCancelled,
+        notice: isAllCancelled
+          ? 'Đơn hàng 0 đồng (toàn bộ món đã hủy) – Bàn ăn đã được giải phóng'
+          : 'Hóa đơn mô phỏng – không thực hiện thanh toán thật',
       };
     });
 
@@ -145,7 +166,12 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Lỗi API POST /api/orders/[id]/close:', error);
-    if (error.code === 'ITEMS_NOT_READY' || error.code === 'ALL_ITEMS_CANCELLED' || error.code === 'ORDER_ALREADY_CLOSED') {
+    if (
+      error.code === 'ITEMS_NOT_READY' ||
+      error.code === 'ALL_ITEMS_CANCELLED' ||
+      error.code === 'ORDER_ALREADY_CLOSED' ||
+      error.code === 'PAYMENT_NOT_CONFIRMED'
+    ) {
       return NextResponse.json(
         { success: false, code: error.code, message: error.message },
         { status: 400 }

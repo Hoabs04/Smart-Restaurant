@@ -80,11 +80,22 @@ CREATE TABLE IF NOT EXISTS orders (
     status TEXT NOT NULL DEFAULT 'OPEN',
     idempotency_key TEXT UNIQUE,
     total_amount INTEGER NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+    payment_method TEXT NOT NULL DEFAULT 'TRANSFER',
+    payment_status TEXT NOT NULL DEFAULT 'PENDING',
+    payment_confirmed_at TIMESTAMP WITH TIME ZONE,
+    payment_confirmed_by TEXT REFERENCES users(id),
+    payment_reference TEXT,
     version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     closed_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'TRANSFER';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'PENDING';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_confirmed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_confirmed_by TEXT REFERENCES users(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reference TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_table_status ON orders (table_id, status);
 
@@ -128,9 +139,12 @@ CREATE TABLE IF NOT EXISTS inventory_ledger (
     idempotency_key TEXT NOT NULL,
     actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_ledger_item_movement UNIQUE (order_item_id, movement_type),
-    CONSTRAINT uq_ledger_idemp_menu_movement UNIQUE (idempotency_key, menu_item_id, movement_type)
+    CONSTRAINT uq_ledger_item_movement UNIQUE (order_item_id, movement_type)
 );
+
+ALTER TABLE inventory_ledger ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_ledger_idemp ON inventory_ledger (idempotency_key);
 
 -- 6. BẢNG ORDER_STATUS_HISTORY & AUDIT_LOGS
 CREATE TABLE IF NOT EXISTS order_status_history (

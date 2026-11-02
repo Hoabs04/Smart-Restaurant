@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/Navbar';
+import AdminNavTabs from '@/components/admin/AdminNavTabs';
 import { 
   FileText, 
   RefreshCw, 
@@ -58,6 +59,8 @@ export default function AdminAuditLogPage() {
       case 'SEND_TO_KITCHEN':
         return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
       case 'CANCEL_ITEM':
+      case 'CANCEL_ORDER':
+      case 'DELETE_USER':
         return 'bg-red-500/10 text-red-400 border-red-500/30';
       case 'UPDATE_ITEM_STATUS':
         return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
@@ -74,6 +77,9 @@ export default function AdminAuditLogPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         
+        {/* SUB-NAVBAR CHUYỂN NHANH CÁC PHÂN HỆ QUẢN TRỊ */}
+        <AdminNavTabs />
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
@@ -105,6 +111,7 @@ export default function AdminAuditLogPage() {
               <option value="UPDATE_TABLE">Sửa bàn</option>
               <option value="CREATE_USER">Tạo tài khoản</option>
               <option value="UPDATE_USER">Sửa tài khoản</option>
+              <option value="DELETE_USER">Xóa tài khoản (DELETE_USER)</option>
             </select>
 
             <button
