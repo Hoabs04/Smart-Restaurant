@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { generateOrderQrCode } from '@/lib/payment-qr';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = getClientIp(req.headers);
+    const rate = checkRateLimit(`guest_track:${ip}`, 60, 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { success: false, code: 'RATE_LIMITED', message: 'Quá nhiều yêu cầu tra cứu. Vui lòng thử lại sau ít giây.' },
+        { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const tableCodeParam = searchParams.get('tableCode')?.trim();
     const orderCodeParam = searchParams.get('orderCode')?.trim();
@@ -21,7 +31,6 @@ export async function GET(req: NextRequest) {
 
     const db = await getDb();
     let targetOrderId: string | null = null;
-    let tableInfo: { id: string; table_code: string; area_name: string; status: string } | null = null;
 
     // 1. Nếu tìm theo tableCode
     if (tableCodeParam) {
@@ -46,8 +55,6 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      tableInfo = table;
-
       // Tìm đơn hàng đang hoạt động của bàn này
       const activeOrder = await db.queryOne<{ id: string; order_code: string }>(
         `SELECT id, order_code 
@@ -59,6 +66,19 @@ export async function GET(req: NextRequest) {
       );
 
       if (!activeOrder) {
+        const pendingReqs = await db.query<{
+          id: string;
+          request_type: string;
+          note: string | null;
+          created_at: string;
+        }>(
+          `SELECT id, request_type, note, created_at
+           FROM table_service_requests
+           WHERE table_id = $1 AND status = 'PENDING'
+           ORDER BY created_at DESC;`,
+          [table.id]
+        );
+
         return NextResponse.json({
           success: true,
           hasActiveOrder: false,
@@ -68,6 +88,12 @@ export async function GET(req: NextRequest) {
             areaName: table.area_name,
             status: table.status,
           },
+          pendingServiceRequests: pendingReqs.map(r => ({
+            id: r.id,
+            requestType: r.request_type,
+            note: r.note,
+            createdAt: r.created_at,
+          })),
           message: `Bàn '${table.table_code}' hiện chưa có đơn gọi món nào đang hoạt động.`,
         });
       }
@@ -75,11 +101,12 @@ export async function GET(req: NextRequest) {
       targetOrderId = activeOrder.id;
     }
 
-    // 2. Nếu tìm trực tiếp theo orderCode
+    // 2. Nếu tìm trực tiếp theo orderCode (chỉ cho phép tra cứu đơn đang hoạt động, không lộ đơn CLOSED cũ)
     if (!targetOrderId && orderCodeParam) {
       const foundOrder = await db.queryOne<{ id: string }>(
         `SELECT id FROM orders 
-         WHERE id = $1 OR UPPER(order_code) = UPPER($1) 
+         WHERE (id = $1 OR UPPER(order_code) = UPPER($1))
+           AND status <> 'CLOSED'
          LIMIT 1;`,
         [orderCodeParam]
       );
@@ -276,6 +303,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const pendingReqs = order.table_id
+      ? await db.query<{
+          id: string;
+          request_type: string;
+          note: string | null;
+          created_at: string;
+        }>(
+          `SELECT id, request_type, note, created_at
+           FROM table_service_requests
+           WHERE table_id = $1 AND status = 'PENDING'
+           ORDER BY created_at DESC;`,
+          [order.table_id]
+        )
+      : [];
+
     return NextResponse.json({
       success: true,
       hasActiveOrder: true,
@@ -284,6 +326,12 @@ export async function GET(req: NextRequest) {
         tableCode: order.table_code,
         areaName: order.area_name,
       },
+      pendingServiceRequests: pendingReqs.map(r => ({
+        id: r.id,
+        requestType: r.request_type,
+        note: r.note,
+        createdAt: r.created_at,
+      })),
       order: {
         id: order.id,
         orderCode: order.order_code,

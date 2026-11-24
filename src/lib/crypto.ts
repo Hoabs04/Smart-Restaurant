@@ -1,35 +1,9 @@
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+import { loadEnvIfMissing } from './env';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 12 bytes recommended for GCM
 const AUTH_TAG_LENGTH = 16;
-
-function loadEnvIfMissing() {
-  if (process.env.SALES_CHANNEL_ENCRYPTION_KEY && process.env.JWT_SECRET) return;
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      content.split(/\r?\n/).forEach((line: string) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const key = trimmed.slice(0, eqIdx).trim();
-          let val = trimmed.slice(eqIdx + 1).trim();
-          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            val = val.slice(1, -1);
-          }
-          if (!(key in process.env)) {
-            process.env[key] = val;
-          }
-        }
-      });
-    }
-  } catch {}
-}
 
 /**
  * Lấy encryption key 32 bytes từ biến môi trường.

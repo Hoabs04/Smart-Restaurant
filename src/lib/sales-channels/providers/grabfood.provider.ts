@@ -51,7 +51,7 @@ export class GrabFoodProvider implements ISalesChannelProvider {
       return cached.token;
     }
 
-    if (credentials.environment === 'SANDBOX' || !credentials.appSecret || credentials.accessToken?.startsWith('mock_')) {
+    if (credentials.environment === 'SANDBOX') {
       const mockToken = credentials.accessToken || `mock_grab_token_${Date.now()}`;
       this.tokenCache.set(cacheKey, {
         token: mockToken,
@@ -60,12 +60,17 @@ export class GrabFoodProvider implements ISalesChannelProvider {
       return mockToken;
     }
 
+    if (!credentials.appSecret) {
+      throw new Error('Thiếu appSecret trong cấu hình GrabFood Production.');
+    }
+
     // Giai đoạn Production: Gọi Endpoint OAuth chính thức của Grab
     try {
       const tokenUrl = `${this.getBaseUrl(credentials.environment)}/partner/v1/oauth/token`;
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
         body: JSON.stringify({
           client_id: credentials.appId,
           client_secret: credentials.appSecret,
@@ -173,9 +178,10 @@ export class GrabFoodProvider implements ISalesChannelProvider {
     }
   }
 
+  private seenReplayTokens: Map<string, number> = new Map();
+
   async verifyWebhookSignature(rawBody: string, headers: Record<string, string>, secret: string): Promise<boolean> {
     if (!secret) {
-      // Lỗi bảo mật: Nếu thiếu webhook secret, bắt buộc từ chối để chống giả mạo
       return false;
     }
 
@@ -208,7 +214,25 @@ export class GrabFoodProvider implements ISalesChannelProvider {
     if (!signature) return false;
 
     const computed = computeHmacSha256(rawBody, secret);
-    return secureTimingCompare(signature, computed);
+    if (!secureTimingCompare(signature, computed)) {
+      return false;
+    }
+
+    // 3. Chống replay khi giữ nguyên body + signature nhưng thay timestamp trong cửa sổ 300s
+    if (isProduction) {
+      const now = Date.now();
+      if (this.seenReplayTokens.has(computed) && (this.seenReplayTokens.get(computed) || 0) > now) {
+        return false;
+      }
+      this.seenReplayTokens.set(computed, now + 300 * 1000);
+      if (this.seenReplayTokens.size > 2000) {
+        for (const [k, exp] of this.seenReplayTokens.entries()) {
+          if (exp <= now) this.seenReplayTokens.delete(k);
+        }
+      }
+    }
+
+    return true;
   }
 
   async parseWebhookOrder(rawPayload: any): Promise<UnifiedExternalOrder> {

@@ -193,6 +193,8 @@ export default function DishBannerCarousel({ compact = false }: DishBannerCarous
                   <img
                     src={dish.image}
                     alt={dish.name}
+                    loading={idx === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
                     className="w-full h-full object-cover object-center"
                   />
                   {/* Subtle soft edge gradient */}
@@ -235,6 +237,8 @@ export default function DishBannerCarousel({ compact = false }: DishBannerCarous
                   <img
                     src={dish.image}
                     alt={dish.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0 group-hover/card:scale-110 transition-transform shadow-xs"
                   />
                   <div className="text-left">

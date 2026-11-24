@@ -18,7 +18,9 @@ import {
   Receipt, 
   ChevronRight,
   ShieldCheck,
-  Ban
+  Ban,
+  BellRing,
+  CreditCard
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
@@ -85,6 +87,12 @@ export interface TrackingData {
     transferContent?: string;
     message?: string;
   } | null;
+  pendingServiceRequests?: Array<{
+    id: string;
+    requestType: 'CALL_WAITER' | 'REQUEST_PAYMENT';
+    note: string | null;
+    createdAt: string;
+  }>;
   serverTime: string;
 }
 
@@ -104,6 +112,14 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<Array<{
+    id: string;
+    requestType: 'CALL_WAITER' | 'REQUEST_PAYMENT';
+    note: string | null;
+    createdAt: string;
+  }>>([]);
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [serviceFeedback, setServiceFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Gọi API lấy dữ liệu tiến độ
   const fetchTracking = useCallback(async (isManual = false) => {
@@ -118,17 +134,18 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
 
       if (!res.ok || !result.success) {
         setErrorMessage(result.message || 'Không thể tải thông tin đơn hàng.');
-        setHasActiveOrder(false);
         return;
       }
 
       if (result.hasActiveOrder === false) {
         setHasActiveOrder(false);
         setEmptyTableInfo(result.table || null);
+        setPendingRequests(result.pendingServiceRequests || []);
         setData(null);
       } else {
         setHasActiveOrder(true);
         setData(result);
+        setPendingRequests(result.pendingServiceRequests || []);
         setEmptyTableInfo(null);
       }
       setErrorMessage('');
@@ -142,14 +159,16 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
     }
   }, [tableCode, orderCode]);
 
-  // Polling tự động mỗi 4 giây
+  // Polling tự động mỗi 4 giây (tạm dừng khi tab ẩn hoặc đơn đã CLOSED)
   useEffect(() => {
     fetchTracking();
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (data?.order?.status === 'CLOSED') return;
       fetchTracking();
     }, 4000);
     return () => clearInterval(interval);
-  }, [fetchTracking]);
+  }, [fetchTracking, data?.order?.status]);
 
   // Bộ đếm số giây kể từ lần đồng bộ cuối
   useEffect(() => {
@@ -163,6 +182,39 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
     navigator.clipboard?.writeText(text);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleServiceRequest = async (
+    requestType: 'CALL_WAITER' | 'REQUEST_PAYMENT',
+    note?: string
+  ) => {
+    const targetTableCode = data?.table?.tableCode || emptyTableInfo?.tableCode || tableCode;
+    if (!targetTableCode || isSendingRequest) return;
+
+    setIsSendingRequest(true);
+    setServiceFeedback(null);
+    try {
+      const res = await fetch('/api/guest/service-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableCode: targetTableCode,
+          requestType,
+          note,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setServiceFeedback({ type: 'success', text: result.message });
+        await fetchTracking(false);
+      } else {
+        setServiceFeedback({ type: 'error', text: result.message || 'Không thể gửi yêu cầu.' });
+      }
+    } catch {
+      setServiceFeedback({ type: 'error', text: 'Lỗi kết nối máy chủ. Vui lòng thử lại.' });
+    } finally {
+      setIsSendingRequest(false);
+    }
   };
 
   // 1. Trạng thái Đang tải ban đầu
@@ -180,7 +232,26 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
     );
   }
 
-  // 2. Trạng thái Bàn chưa có đơn hoặc Lỗi
+  // 2. Trạng thái Lỗi (ưu tiên hiển thị trước trạng thái bàn trống)
+  if (errorMessage && !data) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-100">Không tìm thấy thông tin</h2>
+        <p className="text-slate-400 text-sm mt-2">{errorMessage}</p>
+        <button
+          onClick={() => fetchTracking(true)}
+          className="mt-6 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm"
+        >
+          Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  // 3. Trạng thái Bàn chưa có đơn
   if (hasActiveOrder === false && !data) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 max-w-md mx-auto">
@@ -220,39 +291,49 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
             </p>
           </div>
 
-          <div className="flex items-center justify-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+            <button
+              onClick={() => handleServiceRequest('CALL_WAITER', 'Khách mới vào bàn, cần gọi phục vụ')}
+              disabled={isSendingRequest}
+              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold transition-all inline-flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-60"
+            >
+              <BellRing className="w-3.5 h-3.5" />
+              <span>{isSendingRequest ? 'Đang gửi...' : 'Gọi nhân viên phục vụ'}</span>
+            </button>
             <button
               onClick={() => fetchTracking(true)}
               disabled={isRefreshing}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition-all inline-flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition-all inline-flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span>{isRefreshing ? 'Đang kiểm tra...' : 'Kiểm tra đơn ngay'}</span>
             </button>
           </div>
+
+          {(pendingRequests.length > 0 || serviceFeedback) && (
+            <div className="space-y-2 text-left">
+              {serviceFeedback && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  serviceFeedback.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                }`}>
+                  {serviceFeedback.text}
+                </div>
+              )}
+              {pendingRequests.map((req) => (
+                <div key={req.id} className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
+                  <BellRing className="w-4 h-4 shrink-0 animate-bounce" />
+                  <span>Đang chờ phục vụ: <strong>{req.note || 'Gọi nhân viên'}</strong></span>
+                </div>
+              ))}
+            </div>
+          )}
         </main>
 
         <footer className="text-center text-xs text-slate-500 py-4">
           Tự động đồng bộ mỗi 4 giây • Smart Restaurant
         </footer>
-      </div>
-    );
-  }
-
-  if (errorMessage && !data) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4">
-          <AlertCircle className="w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-100">Không tìm thấy thông tin</h2>
-        <p className="text-slate-400 text-sm mt-2">{errorMessage}</p>
-        <button
-          onClick={() => fetchTracking(true)}
-          className="mt-6 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm"
-        >
-          Thử lại
-        </button>
       </div>
     );
   }
@@ -263,22 +344,22 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
 
   // Xác định bước tiến độ tổng thể (Stepper 1 -> 4)
   const getStepStatus = (stepIndex: number) => {
-    // Step 0: Đã ghi nhận (Luôn hoàn thành nếu có order)
-    // Step 1: Đã chuyển bếp (SENT_TO_KITCHEN hoặc hơn)
-    // Step 2: Đang nấu (IN_PROGRESS hoặc READY_TO_CLOSE hoặc CLOSED)
-    // Step 3: Món sẵn sàng (READY_TO_CLOSE hoặc CLOSED)
+    // Step 0: Đã ghi nhận
+    // Step 1: Đã chuyển bếp (SENT_TO_KITCHEN)
+    // Step 2: Đang nấu (IN_PROGRESS)
+    // Step 3: Món sẵn sàng (READY_TO_CLOSE / CLOSED)
     const stage = order.overallStage;
     if (stage === 'CLOSED' || stage === 'READY_TO_CLOSE') {
       return 'completed';
     }
     if (stage === 'IN_PROGRESS') {
-      if (stepIndex <= 2) return 'completed';
-      if (stepIndex === 3) return 'active';
+      if (stepIndex <= 1) return 'completed';
+      if (stepIndex === 2) return 'active';
       return 'pending';
     }
     if (stage === 'SENT_TO_KITCHEN') {
-      if (stepIndex <= 1) return 'completed';
-      if (stepIndex === 2) return 'active';
+      if (stepIndex === 0) return 'completed';
+      if (stepIndex === 1) return 'active';
       return 'pending';
     }
     // OPEN
@@ -623,7 +704,62 @@ export default function LiveOrderTracker({ tableCode, orderCode }: LiveOrderTrac
           )}
         </div>
 
-        {/* Thanh nhỏ hiển thị thời gian đồng bộ (Polling gần thời gian thực) */}
+        {/* Thanh nhỏ hiển thị thời gian đồng bộ & Trợ lý gọi phục vụ */}
+        {table && order.status !== 'CLOSED' && (
+          <div className="max-w-md mx-auto mt-3 pt-3 border-t border-slate-800/60 space-y-2">
+            {serviceFeedback && (
+              <div className={`px-3 py-2 rounded-xl border text-xs font-semibold text-center ${
+                serviceFeedback.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              }`}>
+                {serviceFeedback.text}
+              </div>
+            )}
+
+            {pendingRequests.length > 0 && (
+              <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 flex items-center justify-center gap-1.5">
+                <BellRing className="w-3.5 h-3.5 shrink-0 animate-bounce" />
+                <span>Đã báo nhân viên: <strong>{pendingRequests[0].note || 'Hỗ trợ tại bàn'}</strong></span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleServiceRequest('CALL_WAITER', 'Khách gọi nhân viên phục vụ')}
+                disabled={isSendingRequest}
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-60"
+              >
+                <BellRing className="w-3.5 h-3.5 text-amber-400" />
+                <span>Gọi phục vụ</span>
+              </button>
+
+              {order.paymentStatus !== 'MANUALLY_CONFIRMED' ? (
+                <button
+                  type="button"
+                  onClick={() => handleServiceRequest('REQUEST_PAYMENT', 'Khách yêu cầu thanh toán')}
+                  disabled={isSendingRequest}
+                  className="py-2 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-60"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Yêu cầu thanh toán</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleServiceRequest('CALL_WAITER', 'Xin thêm đá / khăn / bát đũa')}
+                  disabled={isSendingRequest}
+                  className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-60"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Xin thêm đá / khăn</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="max-w-md mx-auto text-center mt-2 flex items-center justify-center gap-1.5 text-[10px] text-slate-500">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>Tự động cập nhật gần thời gian thực (mỗi 4s)</span>

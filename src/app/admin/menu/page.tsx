@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Eye,
-  Filter
+  Filter,
+  Upload
 } from 'lucide-react';
 import { formatCurrency, getStockStatusInfo } from '@/lib/utils';
 
@@ -97,7 +98,8 @@ export default function AdminMenuPage() {
 
     // Tự động mở modal nếu URL có tham số ?create=true
     if (typeof window !== 'undefined' && window.location.search.includes('create=true')) {
-      openCreateModal();
+      setEditingItem(null);
+      setModalOpen(true);
     }
   }, [fetchData]);
 
@@ -114,6 +116,35 @@ export default function AdminMenuPage() {
       image_key: '/images/dishes/bo-wagyu.jpg',
     });
     setModalOpen(true);
+  };
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
+    setErrorMessage('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/admin/menu-items/upload', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFormData((prev) => ({ ...prev, image_key: data.imageKey }));
+        setSuccessMessage(data.message);
+      } else {
+        setErrorMessage(data.message || 'Không thể tải ảnh lên.');
+      }
+    } catch {
+      setErrorMessage('Lỗi kết nối khi tải ảnh lên.');
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = '';
+    }
   };
 
   const openEditModal = (item: any) => {
@@ -667,15 +698,26 @@ export default function AdminMenuPage() {
                   })}
                 </div>
 
-                {/* Nhập URL ảnh tùy chọn */}
-                <div className="flex gap-2 items-center">
+                {/* Nhập URL ảnh tùy chọn hoặc Tải ảnh lên (S3 / Local) */}
+                <div className="flex flex-wrap gap-2 items-center">
                   <input
                     type="text"
                     value={formData.image_key}
                     onChange={(e) => setFormData({ ...formData, image_key: e.target.value })}
                     placeholder="URL ảnh hoặc /images/dishes/ten-anh.jpg"
-                    className="flex-1 touch-target px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-amber-500 font-mono"
+                    className="flex-1 min-w-[180px] touch-target px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-amber-500 font-mono"
                   />
+                  <label className="touch-target px-3 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shrink-0 transition-colors">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{isUploadingImage ? 'Đang tải...' : 'Tải ảnh lên'}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                      onChange={handleImageUpload}
+                      disabled={isUploadingImage}
+                      className="hidden"
+                    />
+                  </label>
                   {formData.image_key && (
                     <img
                       src={formData.image_key}

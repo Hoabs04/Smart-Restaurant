@@ -91,6 +91,7 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [closeSuccess, setCloseSuccess] = useState(false);
   const [copiedField, setCopiedField] = useState<'account' | 'content' | null>(null);
+  const [printFormat, setPrintFormat] = useState<'A4' | 'K80'>('A4');
 
   // Lấy thông tin user hiện tại
   useEffect(() => {
@@ -125,13 +126,17 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
   }, [fetchOrder]);
 
   // Sao chép thông tin tài khoản hoặc nội dung chuyển khoản
-  const handleCopy = (text: string, field: 'account' | 'content') => {
+  const handleCopy = async (text: string, field: 'account' | 'content') => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => {
-      setCopiedField(null);
-    }, 2500);
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => {
+        setCopiedField(null);
+      }, 2500);
+    } catch {
+      // Bỏ qua nếu trình duyệt chặn clipboard qua HTTP LAN
+    }
   };
 
   // Xác nhận thanh toán chuyển khoản thủ công (chỉ waiter & manager)
@@ -267,13 +272,33 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-xl bg-slate-900 border border-slate-800 p-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setPrintFormat('A4')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors ${
+                  printFormat === 'A4' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Khổ A4
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintFormat('K80')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors ${
+                  printFormat === 'K80' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Bill K80 (80mm)
+              </button>
+            </div>
             <button
               onClick={handlePrint}
               id="btn-print-invoice"
               className="touch-target px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-sm font-semibold border border-slate-700 transition-colors flex items-center gap-2 shadow-sm"
             >
               <Printer className="w-4 h-4 text-amber-400" />
-              <span>In hóa đơn</span>
+              <span>In hóa đơn ({printFormat})</span>
             </button>
           </div>
         </div>
@@ -300,8 +325,10 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
-        {/* PHIẾU HÓA ĐƠN MÔ PHỎNG (HỖ TRỢ IN ẤN) */}
-        <div className="glass-panel bg-slate-900/90 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-6 print:bg-white print:text-black print:border-black print:p-0 print:shadow-none">
+        {/* PHIẾU HÓA ĐƠN MÔ PHỎNG (HỖ TRỢ IN ẤN A4 & K80) */}
+        <div className={`glass-panel bg-slate-900/90 rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-6 print:bg-white print:text-black print:border-black print:p-0 print:shadow-none ${
+          printFormat === 'K80' ? 'max-w-[340px] mx-auto text-xs print-k80' : ''
+        }`}>
           
           {/* Header Nhà Hàng */}
           <div className="text-center pb-6 border-b border-dashed border-slate-800 print:border-black">

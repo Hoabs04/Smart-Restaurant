@@ -1,35 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from './db';
-import fs from 'fs';
-import path from 'path';
-
-function loadEnvIfMissing() {
-  if (process.env.JWT_SECRET) return;
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      content.split(/\r?\n/).forEach((line: string) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const key = trimmed.slice(0, eqIdx).trim();
-          let val = trimmed.slice(eqIdx + 1).trim();
-          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            val = val.slice(1, -1);
-          }
-          if (!(key in process.env)) {
-            process.env[key] = val;
-          }
-        }
-      });
-    }
-  } catch {}
-}
+import { loadEnvIfMissing } from './env';
 
 let cachedJwtSecret: Uint8Array | null = null;
 
@@ -83,7 +57,9 @@ export async function signAuthToken(payload: Omit<TokenPayload, 'iat' | 'exp'>):
  */
 export async function verifyAuthToken(token: string): Promise<TokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
+    const { payload } = await jwtVerify(token, getJwtSecret(), {
+      algorithms: ['HS256'],
+    });
     return payload as unknown as TokenPayload;
   } catch {
     return null;
@@ -154,31 +130,38 @@ export async function requireAuth(
     };
   }
 
-  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return {
-      errorResponse: NextResponse.json(
-        {
-          success: false,
-          code: 'FORBIDDEN',
-          message: `Tài khoản với vai trò '${user.role}' không có quyền thực hiện thao tác này.`,
-        },
-        { status: 403 }
-      ),
-    };
-  }
-
-  // Xác thực tính hợp lệ của tài khoản trong CSDL (chống stale session khi reset DB hoặc xóa tài khoản)
+  // Xác thực tính hợp lệ của tài khoản và vai trò mới nhất trong CSDL (chống stale role / stale session)
   try {
     const db = await getDb();
-    let dbUser = await db.queryOne<{ id: string; is_active: boolean }>(
-      `SELECT id, is_active FROM users WHERE id = $1;`,
+    let dbUser = await db.queryOne<{
+      id: string;
+      is_active: boolean;
+      display_name: string;
+      role_code: 'manager' | 'waiter' | 'kitchen';
+    }>(
+      `SELECT u.id, u.is_active, u.display_name, r.code AS role_code
+       FROM users u
+       JOIN user_roles ur ON u.id = ur.user_id
+       JOIN roles r ON ur.role_id = r.id
+       WHERE u.id = $1
+       LIMIT 1;`,
       [user.userId]
     );
 
-    // Nếu không tìm thấy theo userId (ví dụ DB vừa được re-seed trong dev), thử fallback theo username nếu khớp
-    if (!dbUser && user.username) {
-      const fallbackUser = await db.queryOne<{ id: string; is_active: boolean }>(
-        `SELECT id, is_active FROM users WHERE username = $1;`,
+    // Chỉ fallback theo username trong môi trường dev/test khi DB vừa re-seed
+    if (!dbUser && user.username && process.env.NODE_ENV !== 'production') {
+      const fallbackUser = await db.queryOne<{
+        id: string;
+        is_active: boolean;
+        display_name: string;
+        role_code: 'manager' | 'waiter' | 'kitchen';
+      }>(
+        `SELECT u.id, u.is_active, u.display_name, r.code AS role_code
+         FROM users u
+         JOIN user_roles ur ON u.id = ur.user_id
+         JOIN roles r ON ur.role_id = r.id
+         WHERE u.username = $1
+         LIMIT 1;`,
         [user.username]
       );
       if (fallbackUser) {
@@ -199,8 +182,35 @@ export async function requireAuth(
         ),
       };
     }
+
+    // Luôn đồng bộ role & displayName mới nhất từ CSDL
+    user.role = dbUser.role_code;
+    user.displayName = dbUser.display_name;
   } catch (err) {
-    // Không làm gián đoạn nếu là môi trường đặc thù chưa sẵn sàng kết nối DB
+    console.error('Lỗi xác thực DB trong requireAuth:', err);
+    return {
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          code: 'AUTH_SERVICE_UNAVAILABLE',
+          message: 'Không thể xác thực phiên làm việc lúc này. Vui lòng thử lại sau.',
+        },
+        { status: 503 }
+      ),
+    };
+  }
+
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return {
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          code: 'FORBIDDEN',
+          message: `Tài khoản với vai trò '${user.role}' không có quyền thực hiện thao tác này.`,
+        },
+        { status: 403 }
+      ),
+    };
   }
 
   return { user };

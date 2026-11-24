@@ -18,7 +18,8 @@ import {
   RefreshCw,
   X,
   FileCheck,
-  QrCode
+  QrCode,
+  ArrowRightLeft
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ interface OrderItem {
   itemName: string;
   unitPrice: number;
   quantity: number;
+  notes?: string | null;
   lineTotal: number;
   status: 'NEW' | 'SENT_TO_KITCHEN' | 'IN_PROGRESS' | 'READY' | 'CANCELLED';
   cancelReason: string | null;
@@ -92,6 +94,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [selectedAddItems, setSelectedAddItems] = useState<{ [id: string]: number }>({});
   const [isAddingItems, setIsAddingItems] = useState(false);
+
+  // Modal Chuyển bàn
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [availableTables, setAvailableTables] = useState<Array<{ id: string; tableCode: string; areaName: string; capacity: number }>>([]);
+  const [selectedTargetTableId, setSelectedTargetTableId] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const openTransferModal = async () => {
+    setTransferModalOpen(true);
+    setSelectedTargetTableId('');
+    try {
+      const res = await fetch('/api/tables');
+      const data = await res.json();
+      if (data.success) {
+        const free = (data.data || []).filter((t: any) => t.status === 'AVAILABLE' && t.id !== order?.tableId);
+        setAvailableTables(free);
+        if (free.length > 0) setSelectedTargetTableId(free[0].id);
+      }
+    } catch {}
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (!selectedTargetTableId || isTransferring) return;
+    setIsTransferring(true);
+    setErrorMessage('');
+    try {
+      const res = await fetch(`/api/orders/${orderId}/transfer-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_table_id: selectedTargetTableId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionSuccess(data.message);
+        setTransferModalOpen(false);
+        await fetchOrderDetail();
+      } else {
+        setErrorMessage(data.message || 'Không thể chuyển bàn.');
+      }
+    } catch {
+      setErrorMessage('Lỗi kết nối máy chủ khi chuyển bàn.');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
 
   const fetchOrderDetail = useCallback(async () => {
     try {
@@ -391,6 +438,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </button>
             )}
 
+            {/* Nút Chuyển bàn */}
+            {order.status !== 'CLOSED' && order.tableId && (
+              <button
+                onClick={openTransferModal}
+                className="touch-target px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-blue-400 font-semibold text-xs sm:text-sm border border-slate-700 transition-colors flex items-center gap-1.5"
+                title="Chuyển toàn bộ đơn sang bàn trống khác"
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>Chuyển bàn</span>
+              </button>
+            )}
+
             {/* Nút Hủy toàn bộ đơn hàng */}
             {order.status !== 'CLOSED' && (
               <button
@@ -531,6 +590,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <tr key={item.id} className={isCancelled ? 'opacity-40 bg-slate-900/40' : 'hover:bg-slate-900/30'}>
                       <td className="py-3.5 px-4 font-medium text-slate-200">
                         <div>{item.itemName}</div>
+                        {item.notes && (
+                          <div className="text-[11px] text-amber-400 font-medium mt-0.5">
+                            📝 {item.notes}
+                          </div>
+                        )}
                         {isCancelled && item.cancelReason && (
                           <div className="text-[11px] text-red-400 font-normal italic mt-0.5">
                             Lý do: {item.cancelReason}
@@ -803,6 +867,71 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 ) : (
                   <span>Xác nhận hủy đơn</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHUYỂN BÀN */}
+      {transferModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-blue-400" />
+                <span>Chuyển bàn cho đơn {order.orderCode}</span>
+              </h3>
+              <button
+                onClick={() => setTransferModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Đang phục vụ tại: <strong className="text-amber-400">{order.tableCode}</strong> ({order.areaName}). Chọn bàn trống bên dưới để chuyển toàn bộ món sang:
+            </p>
+
+            {availableTables.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-center text-sm text-slate-400">
+                Hiện không còn bàn nào đang trống để chuyển.
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
+                  Chọn bàn đích
+                </label>
+                <select
+                  value={selectedTargetTableId}
+                  onChange={(e) => setSelectedTargetTableId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                >
+                  {availableTables.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.tableCode} — {t.areaName} ({t.capacity} khách)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setTransferModalOpen(false)}
+                className="touch-target px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-sm font-medium hover:bg-slate-700"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                disabled={!selectedTargetTableId || isTransferring || availableTables.length === 0}
+                onClick={handleConfirmTransfer}
+                className="touch-target px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm disabled:opacity-50 flex items-center gap-2"
+              >
+                {isTransferring ? 'Đang chuyển...' : 'Xác nhận chuyển bàn'}
               </button>
             </div>
           </div>

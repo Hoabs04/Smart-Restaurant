@@ -20,6 +20,7 @@ interface KitchenItem {
   id: string;
   itemName: string;
   quantity: number;
+  notes?: string | null;
   status: 'SENT_TO_KITCHEN' | 'IN_PROGRESS' | 'READY';
   isOverdue: boolean;
   canStart: boolean;
@@ -332,6 +333,12 @@ export default function KitchenQueuePage() {
                               </span>
                             </div>
                           </div>
+
+                          {item.notes && (
+                            <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-semibold text-amber-300">
+                              📝 Ghi chú: {item.notes}
+                            </div>
+                          )}
 
                           {/* Cảnh báo món nếu chờ > 10 phút và chưa làm */}
                           {item.isOverdue && (

@@ -303,12 +303,13 @@ async function runSalesChannelsTests() {
       console.log(`⚠️ Có ${failed} bài test chưa đạt. Vui lòng kiểm tra lại log bên trên.`);
     }
     console.log('==============================================================================\n');
+    return failed === 0;
   }
 }
 
-runSalesChannelsTests().then(async () => {
+runSalesChannelsTests().then(async (ok) => {
   await closeDb();
-  process.exit(0);
+  process.exit(ok ? 0 : 1);
 }).catch(async (e) => {
   console.error(e);
   await closeDb();

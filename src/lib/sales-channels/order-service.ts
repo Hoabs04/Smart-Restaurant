@@ -137,7 +137,7 @@ export class SalesChannelOrderService {
           order.customerPhone ? maskPhoneNumber(order.customerPhone) : null,
           order.deliveryAddress || null,
           order.driverName || null,
-          order.driverPhone || null,
+          order.driverPhone ? maskPhoneNumber(order.driverPhone) : null,
           order.totalAmount,
           order.platformFee,
           order.netRevenue,
@@ -264,7 +264,49 @@ export class SalesChannelOrderService {
       };
     }
 
-    const items: any[] = JSON.parse(extOrder.items_json || '[]');
+    let items: any[] = [];
+    try {
+      items = JSON.parse(extOrder.items_json || '[]');
+    } catch {
+      items = [];
+    }
+
+    // Nếu đơn cũ chưa có internalMenuItemId tại thời điểm nhận đơn -> tự động tra cứu lại bảng mapping mới nhất
+    if (items.some(it => !it.internalMenuItemId)) {
+      const mappings = await db.query<{
+        external_item_id: string;
+        external_item_name: string;
+        internal_menu_item_id: string;
+      }>(
+        `SELECT external_item_id, external_item_name, internal_menu_item_id
+         FROM channel_menu_mappings
+         WHERE channel_id = $1 AND is_active = TRUE;`,
+        [extOrder.channel_id]
+      );
+
+      let updatedAny = false;
+      for (const it of items) {
+        if (!it.internalMenuItemId) {
+          const matched = mappings.find(
+            (m) =>
+              m.external_item_id === it.externalItemId ||
+              m.external_item_name.trim().toLowerCase() === String(it.externalItemName || '').trim().toLowerCase()
+          );
+          if (matched) {
+            it.internalMenuItemId = matched.internal_menu_item_id;
+            updatedAny = true;
+          }
+        }
+      }
+
+      if (updatedAny) {
+        await db.execute(
+          `UPDATE external_orders SET items_json = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;`,
+          [JSON.stringify(items), extOrder.id]
+        );
+      }
+    }
+
     const mappedItems = items.filter(it => it.internalMenuItemId);
 
     if (mappedItems.length === 0) {
@@ -517,13 +559,21 @@ export class SalesChannelOrderService {
       };
     }
 
-    // 5. Đồng bộ thành công -> Cập nhật CSDL nội bộ
-    await db.execute(
-      `UPDATE external_orders
-       SET normalized_status = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2;`,
-      [targetStatus, orderId]
-    );
+    // 5. Đồng bộ thành công -> Nếu là CANCELLED và có internal_order_id, hủy luôn đơn nội bộ + hoàn kho
+    if (targetStatus === 'CANCELLED') {
+      await this.handleExternalCancellation(
+        order.channel_code,
+        order.external_order_id,
+        reason || 'Quản trị viên hủy đơn từ hệ thống'
+      );
+    } else {
+      await db.execute(
+        `UPDATE external_orders
+         SET normalized_status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2;`,
+        [targetStatus, orderId]
+      );
+    }
 
     // 6. Nếu xác nhận đơn (CONFIRMED) và chưa có trong bếp -> Tự động đẩy vào Bếp
     if (targetStatus === 'CONFIRMED' && !order.internal_order_id) {
@@ -709,10 +759,10 @@ export class SalesChannelOrderService {
           }
         }
 
-        // Đóng order nội bộ
+        // Đóng order nội bộ và đặt total_amount = 0 để không cộng nhầm vào doanh thu
         await tx.execute(
           `UPDATE orders
-           SET status = 'CLOSED', closed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+           SET status = 'CLOSED', total_amount = 0, closed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
            WHERE id = $1;`,
           [extOrder.internal_order_id]
         );
@@ -1298,9 +1348,9 @@ export class SalesChannelOrderService {
       `SELECT 
         channel_id,
         COUNT(*)::int as order_count,
-        COALESCE(SUM(total_amount), 0)::int as total_amount,
-        COALESCE(SUM(platform_fee), 0)::int as platform_fee,
-        COALESCE(SUM(net_revenue), 0)::int as net_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE normalized_status <> 'CANCELLED'), 0)::bigint as total_amount,
+        COALESCE(SUM(platform_fee) FILTER (WHERE normalized_status <> 'CANCELLED'), 0)::bigint as platform_fee,
+        COALESCE(SUM(net_revenue) FILTER (WHERE normalized_status <> 'CANCELLED'), 0)::bigint as net_revenue,
         COUNT(*) FILTER (WHERE normalized_status = 'COMPLETED')::int as completed_count,
         COUNT(*) FILTER (WHERE normalized_status = 'CANCELLED')::int as cancelled_count
        FROM external_orders

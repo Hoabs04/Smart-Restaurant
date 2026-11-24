@@ -1,12 +1,11 @@
 #!/bin/bash
 # ==============================================================================
 # Script Khôi phục (Restore) Cơ sở dữ liệu PostgreSQL / Amazon RDS
-# Đề tài: Hệ thống Quản lý Nhà hàng Thông minh trên nền tảng AWS
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
-if [ -z "$1" ]; then
+if [ -z "${1:-}" ]; then
   echo "❌ Lỗi: Vui lòng cung cấp đường dẫn file backup (.sql hoặc .sql.gz)"
   echo "Cách dùng: ./scripts/restore.sh backups/smart_restaurant_backup_YYYYMMDD_HHMMSS.sql.gz"
   exit 1
@@ -26,10 +25,21 @@ DB_USER="${DB_USER:-postgres}"
 
 echo "🔄 Bắt đầu phục hồi cơ sở dữ liệu ${DB_NAME} từ file ${BACKUP_FILE}..."
 
-if [[ "${BACKUP_FILE}" == *.gz ]]; then
-  gunzip -c "${BACKUP_FILE}" | PGPASSWORD="${DB_PASSWORD:-postgres_password}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}"
+if [ -n "${DATABASE_URL:-}" ]; then
+  if [[ "${BACKUP_FILE}" == *.gz ]]; then
+    gunzip -c "${BACKUP_FILE}" | psql -v ON_ERROR_STOP=1 "${DATABASE_URL}"
+  else
+    psql -v ON_ERROR_STOP=1 "${DATABASE_URL}" -f "${BACKUP_FILE}"
+  fi
+elif [ -n "${DB_PASSWORD:-}" ]; then
+  if [[ "${BACKUP_FILE}" == *.gz ]]; then
+    gunzip -c "${BACKUP_FILE}" | PGPASSWORD="${DB_PASSWORD}" psql -v ON_ERROR_STOP=1 -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}"
+  else
+    PGPASSWORD="${DB_PASSWORD}" psql -v ON_ERROR_STOP=1 -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "${BACKUP_FILE}"
+  fi
 else
-  PGPASSWORD="${DB_PASSWORD:-postgres_password}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "${BACKUP_FILE}"
+  echo "❌ Lỗi: Vui lòng cung cấp biến môi trường DATABASE_URL hoặc DB_PASSWORD."
+  exit 1
 fi
 
 echo "✅ Phục hồi cơ sở dữ liệu thành công."

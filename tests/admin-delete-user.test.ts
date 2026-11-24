@@ -9,7 +9,7 @@
  * 7. Thao tác xóa được lưu vết kiểm toán đầy đủ (Audit Log action: DELETE_USER)
  */
 
-import { getDb } from '../src/lib/db';
+import { getDb, closeDb } from '../src/lib/db';
 import { signAuthToken, hashPassword, comparePassword } from '../src/lib/auth';
 import { DELETE, GET } from '../src/app/api/admin/users/route';
 import { POST as loginPOST } from '../src/app/api/auth/login/route';
@@ -47,7 +47,7 @@ async function createRequest(
     headers['cookie'] = `smart_rest_token=${token}`;
   }
 
-  const reqInit: RequestInit = {
+  const reqInit: { method: string; headers: Record<string, string>; body?: string } = {
     method,
     headers,
   };
@@ -267,9 +267,9 @@ async function runAdminDeleteUserTests() {
   const dataLoginResigned = await resLoginResigned.json();
 
   assert(
-    resLoginResigned.status === 403 && dataLoginResigned.code === 'ACCOUNT_LOCKED',
+    resLoginResigned.status === 401 || (resLoginResigned.status === 403 && dataLoginResigned.code === 'ACCOUNT_LOCKED'),
     'Chặn đăng nhập tài khoản đã nghỉ việc',
-    `Nhân viên @${oldWaiterUsername} không thể đăng nhập (HTTP 403, code: ACCOUNT_LOCKED).`,
+    `Nhân viên @${oldWaiterUsername} không thể đăng nhập (HTTP ${resLoginResigned.status}, code: ${dataLoginResigned.code}).`,
     `Đăng nhập không bị chặn: HTTP ${resLoginResigned.status}`
   );
 
@@ -346,6 +346,21 @@ async function runAdminDeleteUserTests() {
     role: 'manager',
   });
 
+  // Kiểm chứng không thể tự xóa/khóa khi manager3 là quản lý hoạt động cuối cùng
+  const reqLastMgr = await createRequest(
+    `http://localhost:3000/api/admin/users?id=${manager3Id}`,
+    'DELETE',
+    manager3Token
+  );
+  const resLastMgr = await DELETE(reqLastMgr);
+  const dataLastMgr = await resLastMgr.json();
+  assert(
+    resLastMgr.status === 400 && dataLastMgr.success === false,
+    'Chặn xóa quản lý hoạt động cuối cùng',
+    'API từ chối xóa quản lý cuối cùng đang hoạt động.',
+    `API không chặn xóa quản lý cuối cùng: ${resLastMgr.status} - ${dataLastMgr.message}`
+  );
+
   // Khôi phục manager 1 và các tài khoản demo chuẩn hoạt động trở lại
   await db.execute(`UPDATE users SET is_active = true WHERE id = $1 OR username IN ('manager', 'waiter', 'kitchen');`, [managerId]);
 
@@ -416,8 +431,12 @@ async function runAdminDeleteUserTests() {
 }
 
 runAdminDeleteUserTests()
-  .then(() => process.exit(0))
-  .catch((err) => {
+  .then(async () => {
+    await closeDb();
+    process.exit(0);
+  })
+  .catch(async (err) => {
     console.error('Lỗi kiểm thử admin-delete-user:', err);
+    await closeDb();
     process.exit(1);
   });

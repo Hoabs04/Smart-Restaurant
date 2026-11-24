@@ -117,9 +117,10 @@ export async function runPaymentQrTests(): Promise<boolean> {
   }
 
   const cleanupOrderIds: string[] = [];
+  const cleanupTableIds: string[] = [testTableId];
 
   try {
-    // Helper tạo Order test với các thông số mong muốn
+    // Helper tạo Order test với các thông số mong muốn (mỗi order dùng 1 bàn riêng để tuân thủ idx_orders_one_open_per_table)
     async function createTestOrder(opts: {
       orderCode: string;
       totalAmount: number;
@@ -128,7 +129,15 @@ export async function runPaymentQrTests(): Promise<boolean> {
       orderStatus?: 'OPEN' | 'READY_TO_CLOSE' | 'CLOSED';
     }) {
       const orderId = crypto.randomUUID();
+      const rowTableId = crypto.randomUUID();
       cleanupOrderIds.push(orderId);
+      cleanupTableIds.push(rowTableId);
+
+      await db.execute(
+        `INSERT INTO dining_tables (id, table_code, area_name, capacity, status, is_active, version)
+         VALUES ($1, $2, 'Khu Test QR', 4, 'OCCUPIED', true, 1);`,
+        [rowTableId, `TB-QR-${rowTableId.slice(0, 8)}`]
+      );
 
       await db.execute(
         `INSERT INTO orders (id, order_code, table_id, created_by, status, total_amount, payment_method, payment_status, version)
@@ -136,7 +145,7 @@ export async function runPaymentQrTests(): Promise<boolean> {
         [
           orderId,
           opts.orderCode,
-          testTableId,
+          rowTableId,
           waiterId,
           opts.orderStatus || 'READY_TO_CLOSE',
           opts.totalAmount,
@@ -330,13 +339,13 @@ export async function runPaymentQrTests(): Promise<boolean> {
     const res6 = await closeOrderApi(req6, { params: Promise.resolve({ id: order4Id }) });
     const data6 = await res6.json();
 
-    const dbOrder6 = await db.queryOne<{ status: string; closed_at: string }>(
-      `SELECT status, closed_at FROM orders WHERE id = $1;`,
+    const dbOrder6 = await db.queryOne<{ status: string; closed_at: string; table_id: string }>(
+      `SELECT status, closed_at, table_id FROM orders WHERE id = $1;`,
       [order4Id]
     );
     const dbTable6 = await db.queryOne<{ status: string }>(
       `SELECT status FROM dining_tables WHERE id = $1;`,
-      [testTableId]
+      [dbOrder6?.table_id || testTableId]
     );
 
     const test6Passed =
@@ -481,7 +490,10 @@ export async function runPaymentQrTests(): Promise<boolean> {
       await db.execute(`DELETE FROM order_status_history WHERE order_id IN (${placeholders});`, cleanupOrderIds);
       await db.execute(`DELETE FROM orders WHERE id IN (${placeholders});`, cleanupOrderIds);
     }
-    await db.execute(`DELETE FROM dining_tables WHERE id = $1;`, [testTableId]);
+    if (cleanupTableIds.length > 0) {
+      const tablePlaceholders = cleanupTableIds.map((_, i) => `$${i + 1}`).join(', ');
+      await db.execute(`DELETE FROM dining_tables WHERE id IN (${tablePlaceholders});`, cleanupTableIds);
+    }
   }
 
   // Tổng kết kết quả

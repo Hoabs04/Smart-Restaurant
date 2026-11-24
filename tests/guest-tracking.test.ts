@@ -241,9 +241,10 @@ export async function runGuestTrackingTests(): Promise<boolean> {
 
   } catch (error) {
     console.error('Lỗi khi chạy bộ kiểm thử guest tracking:', error);
+    record(99, 'Exception trong quá trình kiểm thử', false, String(error));
   }
 
-  const allPassed = results.every((r) => r.passed);
+  const allPassed = results.length > 0 && results.every((r) => r.passed);
   console.log('==============================================================================');
   console.log(`KẾT QUẢ KIỂM THỬ: ${results.filter(r => r.passed).length}/${results.length} TEST CASES ĐẠT`);
   console.log('==============================================================================\n');
@@ -254,11 +255,13 @@ export async function runGuestTrackingTests(): Promise<boolean> {
 // Chạy trực tiếp nếu execute từ CLI
 if (require.main === module) {
   runGuestTrackingTests()
-    .then((success) => {
+    .then(async (success) => {
+      await closeDb();
       process.exit(success ? 0 : 1);
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error(err);
+      await closeDb();
       process.exit(1);
     });
 }

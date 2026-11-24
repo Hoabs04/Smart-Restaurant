@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
       menu_item_id: string;
       item_name_snapshot: string;
       quantity: number;
+      notes: string | null;
       status: string;
       created_at: string;
     }>(
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
         menu_item_id,
         item_name_snapshot,
         quantity,
+        notes,
         status,
         created_at
       FROM order_items
@@ -107,6 +109,7 @@ export async function GET(req: NextRequest) {
           id: it.id,
           itemName: it.item_name_snapshot,
           quantity: it.quantity,
+          notes: it.notes || null,
           status: it.status,
           isOverdue: isItemOverdue,
           canStart: it.status === 'SENT_TO_KITCHEN',

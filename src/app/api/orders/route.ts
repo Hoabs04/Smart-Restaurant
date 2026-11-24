@@ -7,6 +7,7 @@ import crypto from 'crypto';
 interface OrderItemInput {
   menu_item_id: string;
   quantity: number;
+  notes?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -167,10 +168,11 @@ export async function POST(req: NextRequest) {
         const lineTotal = itemInfo.current_price * it.quantity;
         const orderItemId = crypto.randomUUID();
 
+        const cleanNotes = typeof it.notes === 'string' && it.notes.trim() ? it.notes.trim().slice(0, 120) : null;
         await tx.execute(
           `INSERT INTO order_items (
-            id, order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, status, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'NEW', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+            id, order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, notes, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'NEW', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
           [
             orderItemId,
             orderId,
@@ -178,6 +180,7 @@ export async function POST(req: NextRequest) {
             itemInfo.name,
             itemInfo.current_price,
             it.quantity,
+            cleanNotes,
           ]
         );
 

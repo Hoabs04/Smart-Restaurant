@@ -29,14 +29,47 @@ interface UserSession {
   role: 'manager' | 'waiter' | 'kitchen';
 }
 
+// Cache phiên user ở bộ nhớ client (60 giây) để không gọi lại /api/auth/me mỗi lần chuyển trang
+const SESSION_CACHE_TTL_MS = 60_000;
+let cachedUser: UserSession | null = null;
+let cachedUserAt = 0;
+let inflightSessionFetch: Promise<UserSession | null> | null = null;
+
+async function fetchSessionOnce(): Promise<UserSession | null> {
+  if (cachedUser && Date.now() - cachedUserAt < SESSION_CACHE_TTL_MS) {
+    return cachedUser;
+  }
+  if (!inflightSessionFetch) {
+    inflightSessionFetch = fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.user) {
+          cachedUser = data.user;
+          cachedUserAt = Date.now();
+          return cachedUser;
+        }
+        cachedUser = null;
+        cachedUserAt = 0;
+        return null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        inflightSessionFetch = null;
+      });
+  }
+  return inflightSessionFetch;
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<UserSession | null>(null);
+  const [user, setUser] = useState<UserSession | null>(() =>
+    cachedUser && Date.now() - cachedUserAt < SESSION_CACHE_TTL_MS ? cachedUser : null
+  );
   const [isOffline, setIsOffline] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Lắng nghe trạng thái mạng Online / Offline
+  // Lắng nghe trạng thái mạng Online / Offline (chỉ đăng ký 1 lần khi mount)
   useEffect(() => {
     setIsOffline(!navigator.onLine);
 
@@ -46,21 +79,41 @@ export default function Navbar() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Lấy thông tin user hiện tại
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.user) {
-          setUser(data.user);
-        } else if (pathname !== '/login') {
-          router.push('/login');
-        }
-      })
-      .catch(() => {});
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Lấy thông tin user (dùng cache 60s khi chuyển trang, không gọi lại API liên tục)
+  useEffect(() => {
+    if (pathname === '/login') {
+      cachedUser = null;
+      cachedUserAt = 0;
+      setUser(null);
+      return;
+    }
+
+    if (cachedUser && Date.now() - cachedUserAt < SESSION_CACHE_TTL_MS) {
+      setUser(cachedUser);
+      return;
+    }
+
+    let cancelled = false;
+    fetchSessionOnce().then((sessionUser) => {
+      if (cancelled) return;
+      if (sessionUser) {
+        setUser(sessionUser);
+      } else {
+        setUser(null);
+        if (pathname !== '/') {
+          router.push('/login');
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
     };
   }, [pathname, router]);
 
@@ -81,6 +134,9 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    cachedUser = null;
+    cachedUserAt = 0;
+    setUser(null);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       router.push('/login');
@@ -93,23 +149,22 @@ export default function Navbar() {
   const getRoleBadge = (role?: string) => {
     switch (role) {
       case 'manager':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shadow-xs"><Shield className="w-3 h-3" /> Quản lý</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 inline-flex items-center gap-1 whitespace-nowrap"><Shield className="w-3 h-3 shrink-0" /> Quản lý</span>;
       case 'waiter':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-xs"><UtensilsCrossed className="w-3 h-3" /> Phục vụ</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1 whitespace-nowrap"><UtensilsCrossed className="w-3 h-3 shrink-0" /> Phục vụ</span>;
       case 'kitchen':
-        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shadow-xs"><ChefHat className="w-3 h-3" /> Bếp</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1 whitespace-nowrap"><ChefHat className="w-3 h-3 shrink-0" /> Bếp</span>;
       default:
         return null;
     }
   };
 
-  // Các mục điều hướng chính
+  // Các mục điều hướng chính (giữ gọn trên 1 hàng; mục Quản lý Menu nằm trong menu Quản trị)
   const mainNavLinks = [
     { href: '/', label: 'Trang chủ', icon: UtensilsCrossed, roles: ['waiter', 'kitchen', 'manager'] },
     { href: '/tables', label: 'Sơ đồ bàn', icon: Grid, roles: ['waiter', 'manager'] },
-    { href: '/admin/menu', label: 'Thực đơn & Thêm món', icon: BookOpen, roles: ['manager'] },
-    { href: '/orders/new', label: 'Tạo đơn mới', icon: PlusCircle, roles: ['waiter'] },
-    { href: '/kitchen/queue', label: 'Queue Bếp', icon: ChefHat, roles: ['kitchen'] },
+    { href: '/orders/new', label: 'Tạo đơn mới', icon: PlusCircle, roles: ['waiter', 'manager'] },
+    { href: '/kitchen/queue', label: 'Queue Bếp', icon: ChefHat, roles: ['kitchen', 'manager'] },
     { href: '/reports', label: 'Báo cáo', icon: BarChart3, roles: ['manager'] },
   ];
 
@@ -138,26 +193,26 @@ export default function Navbar() {
 
       <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between gap-3 h-16">
             
             {/* Logo */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center shrink-0">
               <Link href="/" className="flex items-center gap-2.5 group">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform shrink-0">
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
-                    SMART RESTAURANT
+                <div className="whitespace-nowrap">
+                  <div className="text-sm xl:text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
+                    <span>SMART RESTAURANT</span>
                     <span className="text-[10px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">AWS MVP</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium">Hệ thống quản lý nhà hàng thông minh</div>
+                  <div className="text-[11px] text-slate-500 font-medium hidden sm:block">Hệ thống quản lý nhà hàng thông minh</div>
                 </div>
               </Link>
             </div>
 
             {/* Desktop & Tablet Navigation */}
-            <nav className="hidden tablet:flex items-center gap-1.5 py-1">
+            <nav className="hidden tablet:flex items-center gap-1 py-1">
               {allowedMainLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = pathname === link.href || (link.href !== '/' && link.href !== '/tables' && pathname.startsWith(link.href));
@@ -165,13 +220,13 @@ export default function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                    className={`touch-target px-2.5 xl:px-3 py-2 rounded-xl text-[13px] xl:text-sm font-semibold transition-all inline-flex items-center gap-1.5 whitespace-nowrap ${
                       isActive
                         ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-4 h-4 shrink-0" />
                     <span>{link.label}</span>
                   </Link>
                 );
@@ -183,7 +238,7 @@ export default function Navbar() {
                   <button
                     type="button"
                     onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                    className={`touch-target px-3.5 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    className={`touch-target px-2.5 xl:px-3 py-2 rounded-xl text-[13px] xl:text-sm font-semibold transition-all inline-flex items-center gap-1.5 whitespace-nowrap ${
                       isAdminActive
                         ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
                         : adminDropdownOpen
@@ -238,10 +293,10 @@ export default function Navbar() {
             </nav>
 
             {/* User Profile & Logout */}
-            <div className="hidden tablet:flex items-center gap-3">
+            <div className="hidden tablet:flex items-center gap-2.5 shrink-0">
               {user && (
-                <div className="text-right">
-                  <div className="text-sm font-bold text-slate-800">{user.displayName}</div>
+                <div className="text-right whitespace-nowrap">
+                  <div className="text-sm font-bold text-slate-800 max-w-[150px] truncate">{user.displayName}</div>
                   <div className="flex items-center justify-end gap-1 mt-0.5">
                     {getRoleBadge(user.role)}
                   </div>
@@ -251,7 +306,8 @@ export default function Navbar() {
               <button
                 onClick={handleLogout}
                 title="Đăng xuất"
-                className="touch-target p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-slate-200 shadow-xs"
+                aria-label="Đăng xuất"
+                className="touch-target p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-slate-200 inline-flex items-center justify-center shrink-0"
               >
                 <LogOut className="w-5 h-5" />
               </button>

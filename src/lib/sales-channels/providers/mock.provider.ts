@@ -39,7 +39,10 @@ export class MockSalesChannelProvider implements ISalesChannelProvider {
   }
 
   async verifyWebhookSignature(rawBody: string, headers: Record<string, string>, secret: string): Promise<boolean> {
-    if (!secret) return true; // Nếu chưa cài webhook secret thì cho phép trong mock sandbox
+    if (process.env.NODE_ENV === 'production') {
+      return false; // Chặn hoàn toàn webhook Mock trên production
+    }
+    if (!secret) return true; // Chỉ cho phép trong môi trường dev/test sandbox
     const signature = headers['x-mock-signature'] || headers['x-signature'];
     if (!signature) return false;
     const computed = computeHmacSha256(rawBody, secret);

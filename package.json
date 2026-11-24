@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx scripts/seed.ts",
-    "test": "tsx tests/run-all.ts && tsx tests/concurrency-api.test.ts && tsx tests/payment-qr.test.ts && tsx tests/guest-tracking.test.ts && tsx tests/high-priority-fixes.test.ts && tsx tests/admin-delete-user.test.ts && tsx tests/admin-menu.test.ts && tsx tests/sales-channels.test.ts && tsx tests/sales-channels-phase2.test.ts && tsx tests/sales-channels-phase3.test.ts && tsx tests/sales-channels-reliability.test.ts"
+    "test": "tsx tests/run-all.ts && tsx tests/concurrency-api.test.ts && tsx tests/payment-qr.test.ts && tsx tests/guest-tracking.test.ts && tsx tests/high-priority-fixes.test.ts && tsx tests/admin-delete-user.test.ts && tsx tests/admin-menu.test.ts && tsx tests/sales-channels.test.ts && tsx tests/sales-channels-phase2.test.ts && tsx tests/sales-channels-phase3.test.ts && tsx tests/sales-channels-reliability.test.ts && tsx tests/security-and-logic-fixes.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

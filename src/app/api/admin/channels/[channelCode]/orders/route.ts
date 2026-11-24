@@ -89,6 +89,13 @@ export async function POST(
   const auth = await requireAuth(req, ['manager']);
   if ('errorResponse' in auth) return auth.errorResponse;
 
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, code: 'FORBIDDEN_IN_PRODUCTION', message: 'Tính năng giả lập đơn hàng bị vô hiệu hóa trên production.' },
+      { status: 403 }
+    );
+  }
+
   try {
     const { channelCode } = await context.params;
     const body = await req.json().catch(() => ({}));

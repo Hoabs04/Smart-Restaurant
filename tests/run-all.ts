@@ -467,6 +467,7 @@ async function runAllTests() {
 
   } catch (err) {
     console.error('Lỗi ngoại lệ trong quá trình chạy test:', err);
+    recordTest('Hệ thống', 'Test Suite Exception', false, String(err));
   } finally {
     await closeDb();
   }

@@ -132,7 +132,7 @@ export async function runReliabilityTests(): Promise<boolean> {
 
     // 1a. Chữ ký timestamp|body chuẩn -> HỢP LỆ
     const validComputedSig = computeHmacSha256(`${validTs}|${sampleBody}`, testSecret);
-    process.env.NODE_ENV = 'production';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
     const is1aValid = await shopeeProvider.verifyWebhookSignature(sampleBody, {
       'x-shopeefood-signature': validComputedSig,
       'x-timestamp': validTs,
@@ -213,7 +213,7 @@ export async function runReliabilityTests(): Promise<boolean> {
     );
 
     // Khôi phục NODE_ENV
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
 
     // --------------------------------------------------------------------------
     // 1B. GRABFOOD SIGNATURE & TIMESTAMP VALIDATION (CHỐNG REPLAY & ĐỊNH DẠNG SAI)
@@ -602,7 +602,7 @@ export async function runReliabilityTests(): Promise<boolean> {
     // --------------------------------------------------------------------------
     console.log('\n--- TEST 5: GrabFood OAuth trong Production không tự sinh Mock Token ---');
     const grabProvider = new GrabFoodProvider();
-    process.env.NODE_ENV = 'production';
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
     let oauthFailedAsExpected = false;
     let thrownErrorMsg = '';
 
@@ -618,7 +618,7 @@ export async function runReliabilityTests(): Promise<boolean> {
       oauthFailedAsExpected = true;
       thrownErrorMsg = e?.message || String(e);
     } finally {
-      process.env.NODE_ENV = originalNodeEnv;
+      (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
     }
 
     recordTest(
@@ -653,7 +653,7 @@ export async function runReliabilityTests(): Promise<boolean> {
     console.error('Lỗi ngoại lệ trong bộ kiểm thử độ tin cậy:', error);
     recordTest('Critical', 'Reliability Test Failure', false, 'Gặp ngoại lệ không mong muốn', error);
   } finally {
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
     console.log('\n==============================================================================');
     console.log('📊 TỔNG HỢP KẾT QUẢ BỘ KIỂM THỬ ĐỘ TIN CẬY & BẢO MẬT:');
     console.log('==============================================================================');

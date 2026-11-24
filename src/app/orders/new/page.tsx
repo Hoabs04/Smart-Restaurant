@@ -38,6 +38,7 @@ interface MenuItem {
 interface CartItem {
   menuItem: MenuItem;
   quantity: number;
+  notes?: string;
 }
 
 interface TableOption {
@@ -77,7 +78,7 @@ function NewOrderContent() {
     setIdempotencyKey(`ord_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
   }, []);
 
-  // Lấy danh sách bàn ăn trống
+  // Lấy danh sách bàn ăn trống (chỉ fetch 1 lần khi mount)
   useEffect(() => {
     fetch('/api/tables')
       .then(res => res.json())
@@ -85,14 +86,17 @@ function NewOrderContent() {
         if (data.success) {
           const availableTables = data.data.filter((t: any) => t.status === 'AVAILABLE');
           setTables(availableTables);
-          if (!selectedTableId && availableTables.length > 0) {
+          if (!initialTableId && availableTables.length > 0) {
             setSelectedTableId(availableTables[0].id);
             setTableVersion(availableTables[0].version);
+          } else if (initialTableId) {
+            const matched = availableTables.find((t: any) => t.id === initialTableId);
+            if (matched) setTableVersion(matched.version);
           }
         }
       })
       .catch(() => {});
-  }, [selectedTableId]);
+  }, [initialTableId]);
 
   // Lấy Menu từ server
   const fetchMenu = async () => {
@@ -119,44 +123,60 @@ function NewOrderContent() {
   const addToCart = (item: MenuItem) => {
     if (!item.canOrder || item.stockQuantity <= 0) return;
 
+    const existing = cart.find(i => i.menuItem.id === item.id);
+    if (existing && existing.quantity >= item.stockQuantity) {
+      setErrorMessage(`Số lượng đặt món '${item.name}' đã đạt giới hạn tồn kho khả dụng (${item.stockQuantity} phần).`);
+      return;
+    }
+
+    setErrorMessage('');
     setCart(prev => {
-      const existing = prev.find(i => i.menuItem.id === item.id);
-      if (existing) {
-        if (existing.quantity >= item.stockQuantity) {
-          setErrorMessage(`Số lượng đặt món '${item.name}' đã đạt giới hạn tồn kho khả dụng (${item.stockQuantity} phần).`);
-          return prev;
-        }
+      const found = prev.find(i => i.menuItem.id === item.id);
+      if (found) {
+        if (found.quantity >= item.stockQuantity) return prev;
         return prev.map(i =>
           i.menuItem.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
       return [...prev, { menuItem: item, quantity: 1 }];
     });
-    setErrorMessage('');
   };
 
   // Cập nhật số lượng trong giỏ
   const updateQuantity = (itemId: string, delta: number) => {
+    const target = cart.find(i => i.menuItem.id === itemId);
+    if (target) {
+      const newQty = target.quantity + delta;
+      if (newQty > target.menuItem.stockQuantity) {
+        setErrorMessage(`Món '${target.menuItem.name}' chỉ còn ${target.menuItem.stockQuantity} phần.`);
+        return;
+      }
+    }
+
+    setErrorMessage('');
     setCart(prev => {
       return prev.map(i => {
         if (i.menuItem.id === itemId) {
           const newQty = i.quantity + delta;
           if (newQty <= 0) return null;
-          if (newQty > i.menuItem.stockQuantity) {
-            setErrorMessage(`Món '${i.menuItem.name}' chỉ còn ${i.menuItem.stockQuantity} phần.`);
-            return i;
-          }
+          if (newQty > i.menuItem.stockQuantity) return i;
           return { ...i, quantity: newQty };
         }
         return i;
       }).filter(Boolean) as CartItem[];
     });
-    setErrorMessage('');
   };
 
   // Xóa món khỏi giỏ
   const removeFromCart = (itemId: string) => {
     setCart(prev => prev.filter(i => i.menuItem.id !== itemId));
+  };
+
+  // Cập nhật ghi chú món ăn (ít cay, không hành...)
+  const updateItemNotes = (itemId: string, notes: string) => {
+    setCart(prev =>
+      prev.map(i => (i.menuItem.id === itemId ? { ...i, notes } : i))
+    );
   };
 
   // Tính tạm tính client (chỉ để xem, server tự xác thực và tính lại)
@@ -197,6 +217,7 @@ function NewOrderContent() {
         items: cart.map(c => ({
           menu_item_id: c.menuItem.id,
           quantity: c.quantity,
+          notes: c.notes?.trim() || undefined,
         })),
       };
 
@@ -482,53 +503,83 @@ function NewOrderContent() {
                   {cart.map((item) => (
                     <div
                       key={item.menuItem.id}
-                      className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between gap-3"
+                      className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 space-y-2"
                     >
-                      {item.menuItem.imageUrl && (
-                        <img
-                          src={item.menuItem.imageUrl}
-                          alt={item.menuItem.name}
-                          className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-700/60"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-slate-200 text-sm truncate">
-                          {item.menuItem.name}
+                      <div className="flex items-center justify-between gap-3">
+                        {item.menuItem.imageUrl && (
+                          <img
+                            src={item.menuItem.imageUrl}
+                            alt={item.menuItem.name}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-700/60"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-200 text-sm truncate">
+                            {item.menuItem.name}
+                          </div>
+                          <div className="text-xs text-amber-400 font-medium">
+                            {formatCurrency(item.menuItem.currentPrice)}
+                          </div>
                         </div>
-                        <div className="text-xs text-amber-400 font-medium">
-                          {formatCurrency(item.menuItem.currentPrice)}
+
+                        {/* Bộ nút tăng giảm số lượng */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.menuItem.id, -1)}
+                            className="touch-target w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+
+                          <span className="w-6 text-center text-sm font-bold text-slate-100">
+                            {item.quantity}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.menuItem.id, 1)}
+                            className="touch-target w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => removeFromCart(item.menuItem.id)}
+                            className="touch-target w-7 h-7 ml-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Bộ nút tăng giảm số lượng */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.menuItem.id, -1)}
-                          className="touch-target w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-
-                        <span className="w-6 text-center text-sm font-bold text-slate-100">
-                          {item.quantity}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.menuItem.id, 1)}
-                          className="touch-target w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => removeFromCart(item.menuItem.id)}
-                          className="touch-target w-7 h-7 ml-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      {/* Ghi chú chế biến cho bếp */}
+                      <div className="space-y-1.5">
+                        <input
+                          type="text"
+                          value={item.notes || ''}
+                          onChange={(e) => updateItemNotes(item.menuItem.id, e.target.value)}
+                          placeholder="Ghi chú cho bếp (VD: Ít cay, không hành...)"
+                          maxLength={120}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {['Ít cay', 'Không hành', 'Ít đá', 'Chín kỹ'].map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => {
+                                const cur = item.notes?.trim() || '';
+                                const next = cur ? (cur.includes(tag) ? cur : `${cur}, ${tag}`) : tag;
+                                updateItemNotes(item.menuItem.id, next);
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-amber-500/20 text-[10px] font-medium text-slate-400 hover:text-amber-300 border border-slate-700/60 transition-colors"
+                            >
+                              + {tag}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ))}

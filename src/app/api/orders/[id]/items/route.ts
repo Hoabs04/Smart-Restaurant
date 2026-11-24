@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getDb, withTransaction } from '@/lib/db';
+import { withTransaction } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import crypto from 'crypto';
 
 interface OrderItemInput {
   menu_item_id: string;
   quantity: number;
+  notes?: string;
 }
 
 export async function POST(
@@ -46,8 +47,9 @@ export async function POST(
         order_code: string;
         status: string;
         total_amount: number;
+        payment_status: string | null;
       }>(
-        `SELECT id, order_code, status, total_amount 
+        `SELECT id, order_code, status, total_amount, payment_status
          FROM orders 
          WHERE id = $1 FOR UPDATE;`,
         [orderId]
@@ -107,10 +109,11 @@ export async function POST(
         addedAmount += lineTotal;
 
         const orderItemId = crypto.randomUUID();
+        const cleanNotes = typeof it.notes === 'string' && it.notes.trim() ? it.notes.trim().slice(0, 120) : null;
         await tx.execute(
           `INSERT INTO order_items (
-            id, order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, status, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'NEW', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+            id, order_id, menu_item_id, item_name_snapshot, unit_price_snapshot, quantity, notes, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'NEW', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
           [
             orderItemId,
             orderId,
@@ -118,6 +121,7 @@ export async function POST(
             itemInfo.name,
             itemInfo.current_price,
             it.quantity,
+            cleanNotes,
           ]
         );
 
@@ -131,22 +135,34 @@ export async function POST(
         });
       }
 
-      // Cập nhật lại total_amount và đưa order về status OPEN (nếu cần gửi batch mới)
+      // Cập nhật lại total_amount, đưa order về status OPEN (nếu cần gửi batch mới),
+      // và reset payment_status về PENDING nếu trước đó đã xác nhận thanh toán cho số tiền cũ
       const newTotal = Number(order.total_amount) + addedAmount;
       const newStatus = order.status === 'READY_TO_CLOSE' ? 'OPEN' : order.status;
+      const resetPayment = order.payment_status === 'MANUALLY_CONFIRMED';
 
       await tx.execute(
         `UPDATE orders 
-         SET total_amount = $1, status = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP 
+         SET total_amount = $1,
+             status = $2,
+             payment_status = CASE WHEN $4 THEN 'PENDING' ELSE payment_status END,
+             payment_confirmed_at = CASE WHEN $4 THEN NULL ELSE payment_confirmed_at END,
+             payment_confirmed_by = CASE WHEN $4 THEN NULL ELSE payment_confirmed_by END,
+             payment_reference = CASE WHEN $4 THEN NULL ELSE payment_reference END,
+             version = version + 1,
+             updated_at = CURRENT_TIMESTAMP 
          WHERE id = $3;`,
-        [newTotal, newStatus, orderId]
+        [newTotal, newStatus, orderId, resetPayment]
       );
 
       // Ghi lịch sử
+      const historyNote = resetPayment
+        ? 'Thêm món mới vào đơn hàng (tự động đặt lại trạng thái chờ xác nhận thanh toán)'
+        : 'Thêm món mới vào đơn hàng';
       await tx.execute(
         `INSERT INTO order_status_history (id, order_id, from_status, to_status, changed_by, changed_at, note)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'Thêm món mới vào đơn hàng');`,
-        [crypto.randomUUID(), orderId, order.status, newStatus, actor.userId]
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6);`,
+        [crypto.randomUUID(), orderId, order.status, newStatus, actor.userId, historyNote]
       );
 
       return {
@@ -180,6 +196,12 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Lỗi API POST /api/orders/[id]/items:', error);
+    if (error.code === 'ORDER_NOT_FOUND') {
+      return NextResponse.json(
+        { success: false, code: error.code, message: error.message },
+        { status: 404 }
+      );
+    }
     if (error.code === 'OUT_OF_STOCK' || error.code === 'ORDER_ALREADY_CLOSED' || error.code === 'MENU_ITEM_NOT_FOUND') {
       return NextResponse.json(
         { success: false, code: error.code, message: error.message, outOfStockItems: error.outOfStockItems },

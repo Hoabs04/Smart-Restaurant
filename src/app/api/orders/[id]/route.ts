@@ -59,7 +59,7 @@ export async function GET(
         o.created_at,
         o.closed_at
       FROM orders o
-      JOIN dining_tables t ON o.table_id = t.id
+      LEFT JOIN dining_tables t ON o.table_id = t.id
       JOIN users u ON o.created_by = u.id
       LEFT JOIN users u_conf ON o.payment_confirmed_by = u_conf.id
       LEFT JOIN (
@@ -90,6 +90,7 @@ export async function GET(
       item_name_snapshot: string;
       unit_price_snapshot: number;
       quantity: number;
+      notes: string | null;
       status: string;
       cancel_reason: string | null;
       cancelled_at: string | null;
@@ -104,6 +105,7 @@ export async function GET(
         oi.item_name_snapshot,
         oi.unit_price_snapshot,
         oi.quantity,
+        oi.notes,
         oi.status,
         oi.cancel_reason,
         oi.cancelled_at,
@@ -197,6 +199,7 @@ export async function GET(
           itemName: it.item_name_snapshot,
           unitPrice: Number(it.unit_price_snapshot),
           quantity: Number(it.quantity),
+          notes: it.notes || null,
           lineTotal: Number(it.unit_price_snapshot) * Number(it.quantity),
           status: it.status,
           cancelReason: it.cancel_reason,

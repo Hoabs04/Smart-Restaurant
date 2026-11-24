@@ -27,11 +27,12 @@ let isInitialized = false;
  */
 export async function getDb(): Promise<DbClient> {
   const isProduction = process.env.NODE_ENV === 'production';
+  const forceLocalPglite = process.env.FORCE_LOCAL_PGLITE === 'true';
   const databaseUrl = process.env.DATABASE_URL;
   const isPostgresServerSpecified = databaseUrl && !databaseUrl.includes('localhost:5432/smart_restaurant?fallback=pglite');
   const allowPgliteFallback = process.env.DB_FALLBACK_PGLITE === 'true';
 
-  if (isProduction) {
+  if (isProduction && !forceLocalPglite) {
     if (!databaseUrl || !isPostgresServerSpecified) {
       throw new Error(
         'CRITICAL DATABASE ERROR: DATABASE_URL pointing to a valid PostgreSQL server must be configured in production environment.'
@@ -43,6 +44,11 @@ export async function getDb(): Promise<DbClient> {
         const pool = new pg.Pool({
           connectionString: databaseUrl,
           connectionTimeoutMillis: 5000,
+          max: 20,
+          idleTimeoutMillis: 30000,
+        });
+        pool.on('error', (poolErr) => {
+          console.error('Lỗi kết nối nhàn rỗi trong PostgreSQL pool:', poolErr);
         });
         const client = await pool.connect();
         client.release();
@@ -57,12 +63,17 @@ export async function getDb(): Promise<DbClient> {
       }
     }
   } else {
-    // Non-production (development / test)
-    if (isPostgresServerSpecified && !pgPoolInstance && !pgliteInstance) {
+    // Non-production (development / test) hoặc local demo với FORCE_LOCAL_PGLITE=true
+    if (!forceLocalPglite && isPostgresServerSpecified && !pgPoolInstance && !pgliteInstance) {
       try {
         const pool = new pg.Pool({
           connectionString: databaseUrl,
           connectionTimeoutMillis: 3000,
+          max: 15,
+          idleTimeoutMillis: 30000,
+        });
+        pool.on('error', (poolErr) => {
+          console.error('Lỗi kết nối nhàn rỗi trong PostgreSQL pool:', poolErr);
         });
         const client = await pool.connect();
         client.release();
@@ -73,10 +84,11 @@ export async function getDb(): Promise<DbClient> {
           console.warn('⚠️ [DEV/TEST] Không kết nối được PostgreSQL server, kích hoạt PGlite embedded do cờ DB_FALLBACK_PGLITE=true được bật.');
           pgPoolInstance = null;
         } else {
+          const maskedUrl = databaseUrl ? databaseUrl.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@') : 'N/A';
           console.error('❌ [DATABASE ERROR] Không kết nối được PostgreSQL server:', err?.message || err);
           pgPoolInstance = null;
           throw new Error(
-            `DATABASE CONNECTION FAILED: Không thể kết nối tới PostgreSQL server tại ${databaseUrl}. Nếu muốn tự động fallback sang PGlite trong dev/test, hãy đặt DB_FALLBACK_PGLITE=true trong file .env.`
+            `DATABASE CONNECTION FAILED: Không thể kết nối tới PostgreSQL server tại ${maskedUrl}. Nếu muốn tự động fallback sang PGlite trong dev/test, hãy đặt DB_FALLBACK_PGLITE=true trong file .env.`
           );
         }
       }
@@ -257,6 +269,26 @@ async function ensurePgliteInitialized(): Promise<void> {
       try {
         await pgliteInstance.exec(
           `ALTER TABLE inventory_ledger DROP CONSTRAINT IF EXISTS uq_ledger_idemp_menu_movement;`
+        );
+      } catch {}
+
+      // Đảm bảo bảng table_service_requests tồn tại trên PGlite cũ
+      try {
+        const reqTableCheck = await pgliteInstance.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_name = 'table_service_requests';`
+        );
+        if (!reqTableCheck.rows || reqTableCheck.rows.length === 0) {
+          const m3Path = path.join(process.cwd(), 'prisma', 'migrations', '3_guest_service_requests', 'migration.sql');
+          if (fs.existsSync(m3Path)) {
+            await pgliteInstance.exec(fs.readFileSync(m3Path, 'utf-8'));
+          }
+        }
+      } catch {}
+
+      // Đảm bảo order_items có cột notes
+      try {
+        await pgliteInstance.exec(
+          `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS notes TEXT;`
         );
       } catch {}
 

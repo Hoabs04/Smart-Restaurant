@@ -47,6 +47,32 @@ export async function GET(req: NextRequest) {
 
     const rows = await db.query(sql, params);
 
+    // Lấy các yêu cầu hỗ trợ đang chờ xử lý từ khách tại bàn
+    const pendingReqRows = await db.query<{
+      id: string;
+      table_id: string;
+      request_type: 'CALL_WAITER' | 'REQUEST_PAYMENT';
+      note: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, table_id, request_type, note, created_at
+       FROM table_service_requests
+       WHERE status = 'PENDING'
+       ORDER BY created_at DESC;`
+    );
+
+    const reqMap = new Map<string, Array<{ id: string; requestType: 'CALL_WAITER' | 'REQUEST_PAYMENT'; note: string | null; createdAt: string }>>();
+    for (const pr of pendingReqRows) {
+      const list = reqMap.get(pr.table_id) || [];
+      list.push({
+        id: pr.id,
+        requestType: pr.request_type,
+        note: pr.note,
+        createdAt: pr.created_at,
+      });
+      reqMap.set(pr.table_id, list);
+    }
+
     // Lấy danh sách các khu vực hiện có
     const areas = await db.query<{ area_name: string }>(
       `SELECT DISTINCT area_name FROM dining_tables WHERE is_active = true ORDER BY area_name ASC;`
@@ -61,6 +87,7 @@ export async function GET(req: NextRequest) {
         capacity: r.capacity,
         status: r.status,
         version: r.version,
+        pendingRequests: reqMap.get(r.id) || [],
         currentOrder: r.current_order_id ? {
           id: r.current_order_id,
           orderCode: r.current_order_code,

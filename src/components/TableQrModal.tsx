@@ -78,15 +78,27 @@ export default function TableQrModal({
     document.body.removeChild(a);
   };
 
+  const escapeHtml = (unsafe: string) =>
+    unsafe
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
+
+    const safeTableCode = escapeHtml(tableCode);
+    const safeAreaName = escapeHtml(areaName);
+    const safeQrDataUrl = qrDataUrl.startsWith('data:image/') ? qrDataUrl : '';
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Mã QR Bàn - ${tableCode}</title>
+          <title>Mã QR Bàn - ${safeTableCode}</title>
           <style>
             body {
               font-family: system-ui, -apple-system, sans-serif;
@@ -151,9 +163,9 @@ export default function TableQrModal({
         <body>
           <div class="card">
             <div class="brand">Smart Restaurant</div>
-            <h1 class="table-title">${tableCode}</h1>
-            <div class="area">${areaName}</div>
-            <img class="qr-img" src="${qrDataUrl}" alt="QR Code" />
+            <h1 class="table-title">${safeTableCode}</h1>
+            <div class="area">${safeAreaName}</div>
+            <img class="qr-img" src="${safeQrDataUrl}" alt="QR Code" />
             <div class="instruction">Quét mã bằng Camera điện thoại</div>
             <div class="sub-instruction">Theo dõi tiến độ chế biến món ăn trực tiếp từ Bếp</div>
           </div>

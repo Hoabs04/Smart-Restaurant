@@ -1,6 +1,5 @@
 import QRCode from 'qrcode';
-import fs from 'fs';
-import path from 'path';
+import { loadEnvIfMissing } from './env';
 
 export interface PaymentConfig {
   enabled: boolean;
@@ -24,36 +23,8 @@ export interface OrderQrPaymentData {
   vietQrUrl?: string;
 }
 
-function ensureEnvLoaded() {
-  if (process.env.PAYMENT_QR_ENABLED !== undefined) return;
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      content.split(/\r?\n/).forEach(line => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const key = trimmed.slice(0, eqIdx).trim();
-          let val = trimmed.slice(eqIdx + 1).trim();
-          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            val = val.slice(1, -1);
-          }
-          if (!(key in process.env)) {
-            process.env[key] = val;
-          }
-        }
-      });
-    }
-  } catch {}
-}
-
-/**
- * Đọc cấu hình tài khoản ngân hàng từ biến môi trường
- */
 export function getPaymentConfig(): PaymentConfig | null {
-  ensureEnvLoaded();
+  loadEnvIfMissing();
   const enabled = process.env.PAYMENT_QR_ENABLED === 'true';
   const bankBin = process.env.PAYMENT_BANK_BIN?.trim() || '';
   const bankName = process.env.PAYMENT_BANK_NAME?.trim() || '';

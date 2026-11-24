@@ -38,6 +38,14 @@ yarn-error.log*
 # Test files and coverage
 tests/
 coverage/
+backups/
+scratch/
+GEMINI.md
+cookie.txt
+*.tsbuildinfo
+*.docx
+README.md
+public/db/
 
 # OS files
 .DS_Store

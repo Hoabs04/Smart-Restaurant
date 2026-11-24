@@ -146,6 +146,14 @@ export default function AdminChannelsPage() {
       if (toDate) params.set('to', toDate);
 
       const res = await fetch(`/api/admin/channels?${params.toString()}`);
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+      if (res.status === 403) {
+        window.location.href = '/unauthorized';
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setChannels(data.channels || []);
@@ -154,8 +162,8 @@ export default function AdminChannelsPage() {
         setErrorMessage(data.message || 'Không thể tải danh sách kênh.');
       }
 
-      // Tải thêm đơn hàng gần đây từ kênh đầu tiên đang active
-      const ordersRes = await fetch('/api/admin/channels/GRABFOOD/orders?limit=10');
+      // Tải thêm đơn hàng gần đây từ tất cả các kênh
+      const ordersRes = await fetch('/api/admin/channels/all/orders?limit=10');
       const ordersData = await ordersRes.json();
       if (ordersData.success) {
         setRecentOrders(ordersData.orders || []);
@@ -403,10 +411,10 @@ export default function AdminChannelsPage() {
           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
             <button
               onClick={handleExportCsv}
-              className="touch-target px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5"
+              className="touch-target px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5"
               title="Xuất file đối soát Excel/CSV cho kế toán"
             >
-              <Download className="w-3.5 h-3.5 text-orange-400" />
+              <Download className="w-3.5 h-3.5 text-white" />
               <span>Xuất đối soát CSV</span>
             </button>
           </div>

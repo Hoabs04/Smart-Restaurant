@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { decryptSecret } from '@/lib/crypto';
+import { decryptSecret, maskPhoneNumber } from '@/lib/crypto';
 import { getChannelProvider } from '@/lib/sales-channels/factory';
 import { salesChannelOrderService } from '@/lib/sales-channels/order-service';
 
@@ -10,6 +10,14 @@ export async function POST(
 ) {
   try {
     const { channelCode } = await context.params;
+
+    if (process.env.NODE_ENV === 'production' && channelCode.toUpperCase() === 'MOCK') {
+      return NextResponse.json(
+        { success: false, code: 'CHANNEL_DISABLED', message: 'Kênh MOCK bị vô hiệu hóa trên môi trường production.' },
+        { status: 403 }
+      );
+    }
+
     const db = await getDb();
 
     // 1. Kiểm tra kênh bán hàng có tồn tại và đang bật không
@@ -232,14 +240,22 @@ export async function POST(
     if (eventType.includes('DRIVER') && orderId) {
       const driver = payload.driver || payload.shipper || {};
       const driverName = driver.name || payload.driver_name || payload.shipper_name || 'Tài xế giao hàng';
-      const driverPhone = driver.phone || driver.phoneNumber || payload.driver_phone || payload.shipper_phone || '';
+      const rawDriverPhone = driver.phone || driver.phoneNumber || payload.driver_phone || payload.shipper_phone || '';
+      const driverPhone = rawDriverPhone ? maskPhoneNumber(String(rawDriverPhone)) : '';
 
-      await db.execute(
+      const updateRes = await db.execute(
         `UPDATE external_orders 
          SET driver_name = $1, driver_phone = $2, updated_at = CURRENT_TIMESTAMP
          WHERE external_order_id = $3 AND channel_id = $4;`,
         [driverName, driverPhone, orderId, channel.id]
       );
+
+      if (updateRes.rowCount === 0) {
+        return NextResponse.json(
+          { success: false, code: 'ORDER_NOT_FOUND', message: `Không tìm thấy đơn hàng [${orderId}] để cập nhật tài xế.` },
+          { status: 404 }
+        );
+      }
 
       await salesChannelOrderService.recordSyncLog({
         channelId: channel.id,
@@ -270,10 +286,10 @@ export async function POST(
       isExisting: ingestResult.isExisting,
     }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Lỗi POST webhook channel:', error);
     return NextResponse.json(
-      { success: false, code: 'WEBHOOK_PROCESSING_ERROR', message: error?.message || 'Lỗi xử lý webhook.' },
+      { success: false, code: 'WEBHOOK_PROCESSING_ERROR', message: 'Lỗi máy chủ khi xử lý webhook.' },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getDb, withTransaction } from '@/lib/db';
+import { withTransaction } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import crypto from 'crypto';
 
@@ -15,13 +15,6 @@ export async function POST(
 
   try {
     const { id: orderId } = await context.params;
-
-    let body: { bypassPaymentCheck?: boolean } = {};
-    try {
-      body = await req.json();
-    } catch {
-      // Body rỗng được chấp nhận
-    }
 
     const result = await withTransaction(async (tx) => {
       // 1. Khóa và lấy thông tin Order
@@ -74,9 +67,9 @@ export async function POST(
           );
 
       // Kiểm tra xác nhận thanh toán trước khi chốt đơn:
-      // Nếu tổng tiền > 0: bắt buộc phải có xác nhận thanh toán (trừ khi có cờ bypass rõ ràng)
+      // Nếu tổng tiền > 0: bắt buộc phải có xác nhận thanh toán thủ công
       // Nếu đơn 0 đồng (do toàn bộ món đã hủy hoặc không có tiền): không yêu cầu xác nhận thanh toán
-      if (verifiedTotal > 0 && order.payment_status !== 'MANUALLY_CONFIRMED' && !body.bypassPaymentCheck) {
+      if (verifiedTotal > 0 && order.payment_status !== 'MANUALLY_CONFIRMED') {
         throw {
           code: 'PAYMENT_NOT_CONFIRMED',
           message: 'Chưa thể chốt đơn: Khách hàng chưa hoàn tất chuyển khoản hoặc nhân viên chưa xác nhận nhận tiền. Vui lòng bấm "Đã kiểm tra và nhận chuyển khoản" trước khi chốt đơn.',
@@ -103,13 +96,15 @@ export async function POST(
         [verifiedTotal, orderId]
       );
 
-      // 5. Giải phóng bàn ăn: chuyển về AVAILABLE (Trống)
-      await tx.execute(
-        `UPDATE dining_tables 
-         SET status = 'AVAILABLE', version = version + 1, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $1;`,
-        [order.table_id]
-      );
+      // 5. Giải phóng bàn ăn: chuyển về AVAILABLE (Trống) nếu là đơn tại bàn
+      if (order.table_id) {
+        await tx.execute(
+          `UPDATE dining_tables 
+           SET status = 'AVAILABLE', version = version + 1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1;`,
+          [order.table_id]
+        );
+      }
 
       // 6. Ghi lịch sử Order
       const closeNote = isAllCancelled
@@ -166,6 +161,12 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Lỗi API POST /api/orders/[id]/close:', error);
+    if (error.code === 'ORDER_NOT_FOUND') {
+      return NextResponse.json(
+        { success: false, code: error.code, message: error.message },
+        { status: 404 }
+      );
+    }
     if (
       error.code === 'ITEMS_NOT_READY' ||
       error.code === 'ALL_ITEMS_CANCELLED' ||

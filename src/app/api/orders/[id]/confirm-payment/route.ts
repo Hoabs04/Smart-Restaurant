@@ -50,15 +50,7 @@ export async function POST(
       );
     }
 
-    // Không thể xác nhận thanh toán cho đơn hàng đã hủy hoàn toàn
-    if (existingOrder.status === 'CANCELLED') {
-      return NextResponse.json(
-        { success: false, code: 'ORDER_CANCELLED', message: 'Đơn hàng này đã bị hủy, không thể xác nhận thanh toán.' },
-        { status: 400 }
-      );
-    }
-
-    // 2. Cơ chế Idempotency: nếu đơn hàng đã được MANUALLY_CONFIRMED trước đó, trả về thành công an toàn không ghi lặp
+    // 1.5 Cơ chế Idempotency: nếu đơn hàng đã được MANUALLY_CONFIRMED trước đó, trả về thành công an toàn không ghi lặp
     if (existingOrder.payment_status === 'MANUALLY_CONFIRMED') {
       return NextResponse.json({
         success: true,
@@ -68,6 +60,21 @@ export async function POST(
         paymentConfirmedAt: existingOrder.payment_confirmed_at,
         paymentConfirmedBy: existingOrder.payment_confirmed_by,
       });
+    }
+
+    // Không thể xác nhận thanh toán cho đơn hàng đã chốt hoặc có tổng tiền 0 đồng
+    if (existingOrder.status === 'CLOSED') {
+      return NextResponse.json(
+        { success: false, code: 'ORDER_ALREADY_CLOSED', message: 'Đơn hàng này đã được chốt, không thể xác nhận thanh toán.' },
+        { status: 400 }
+      );
+    }
+
+    if (Number(existingOrder.total_amount) <= 0) {
+      return NextResponse.json(
+        { success: false, code: 'ZERO_AMOUNT_ORDER', message: 'Đơn hàng có tổng tiền 0 đồng, không cần xác nhận chuyển khoản.' },
+        { status: 400 }
+      );
     }
 
     // 3. Thực hiện cập nhật trạng thái thanh toán trong transaction an toàn
@@ -83,6 +90,10 @@ export async function POST(
 
       if (!lockedOrder) {
         throw { code: 'ORDER_NOT_FOUND', message: 'Không tìm thấy đơn hàng.' };
+      }
+
+      if (lockedOrder.status === 'CLOSED') {
+        throw { code: 'ORDER_ALREADY_CLOSED', message: 'Đơn hàng đã được chốt.', status: 400 };
       }
 
       if (lockedOrder.payment_status === 'MANUALLY_CONFIRMED') {

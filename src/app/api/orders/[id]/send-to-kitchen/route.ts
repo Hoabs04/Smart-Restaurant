@@ -117,7 +117,7 @@ export async function POST(
 
       const menuItemIds = Array.from(quantityByMenuItem.keys());
 
-      // Khóa và kiểm tra tồn kho các món ăn trong kho bằng FOR UPDATE
+      // Khóa và kiểm tra tồn kho các món ăn theo thứ tự id tăng dần để tránh deadlock
       const stockRows = await tx.query<{
         id: string;
         name: string;
@@ -126,7 +126,8 @@ export async function POST(
       }>(
         `SELECT id, name, stock_quantity, availability 
          FROM menu_items 
-         WHERE id = ANY($1) 
+         WHERE id = ANY($1)
+         ORDER BY id ASC
          FOR UPDATE;`,
         [menuItemIds]
       );

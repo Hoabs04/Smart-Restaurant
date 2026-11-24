@@ -26,7 +26,17 @@ async function seed() {
   const roleMap = Object.fromEntries(roleRows.map(r => [r.code, r.id]));
 
   // 2. Tạo Users
-  const defaultPasswordHash = await bcrypt.hash('Restaurant@2026', 10);
+  const seedPassword =
+    process.env.SEED_DEFAULT_PASSWORD ||
+    (process.env.NODE_ENV === 'production' ? '' : 'Restaurant@2026');
+
+  if (!seedPassword) {
+    throw new Error(
+      '❌ Lỗi bảo mật: Phải cấu hình biến môi trường SEED_DEFAULT_PASSWORD khi chạy seed trên production.'
+    );
+  }
+
+  const defaultPasswordHash = await bcrypt.hash(seedPassword, 10);
 
   const users = [
     { id: 'c0000000-0000-0000-0000-000000000001', username: 'manager', displayName: 'Nguyễn Văn Quản Lý', role: 'manager' },

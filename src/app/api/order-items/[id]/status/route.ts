@@ -100,7 +100,12 @@ export async function PATCH(
         ]
       );
 
-      // 4. Đánh giá và cập nhật Order State Machine
+      // 4. Khóa Order FOR UPDATE trước khi đánh giá và cập nhật Order State Machine
+      await tx.queryOne<{ id: string }>(
+        `SELECT id FROM orders WHERE id = $1 FOR UPDATE;`,
+        [item.order_id]
+      );
+
       const allItems = await tx.query<{ id: string; status: string }>(
         `SELECT id, status FROM order_items WHERE order_id = $1;`,
         [item.order_id]

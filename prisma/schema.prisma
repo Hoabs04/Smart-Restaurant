@@ -31,6 +31,7 @@ model User {
   batches_created KitchenBatch[] @relation("BatchCreatedBy")
   status_changes OrderStatusHistory[]
   audit_logs    AuditLog[]
+  inventory_ledgers InventoryLedger[] @relation("InventoryActor")
 
   @@map("users")
 }
@@ -179,6 +180,8 @@ model Order {
   external_orders ExternalOrder[]
 
   @@index([table_id, status])
+  @@index([status, closed_at])
+  @@index([order_source, status])
   @@map("orders")
 }
 
@@ -207,6 +210,7 @@ model OrderItem {
   item_name_snapshot  String          // Snapshot tên món tại thời điểm order
   unit_price_snapshot Int             // Snapshot đơn giá VND tại thời điểm order
   quantity            Int             @default(1)
+  notes               String?         // Ghi chú chế biến (ít cay, không hành...)
   status              OrderItemStatus @default(NEW)
   cancel_reason       String?         // Bắt buộc khi hủy
   cancelled_at        DateTime?
@@ -221,6 +225,7 @@ model OrderItem {
 
   @@index([order_id, status])
   @@index([kitchen_batch_id])
+  @@index([menu_item_id])
   @@map("order_items")
 }
 
@@ -245,6 +250,7 @@ model InventoryLedger {
 
   menu_item       MenuItem     @relation(fields: [menu_item_id], references: [id])
   order_item      OrderItem    @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  actor           User         @relation("InventoryActor", fields: [actor_id], references: [id])
 
   // Ràng buộc duy nhất ngăn chặn trừ hoặc hoàn kho lặp lại theo order_item_id
   @@unique([order_item_id, movement_type])
@@ -385,6 +391,7 @@ model ExternalOrder {
   @@unique([channel_id, external_order_id])
   @@index([channel_code, normalized_status])
   @@index([ordered_at])
+  @@index([internal_order_id])
   @@map("external_orders")
 }
 

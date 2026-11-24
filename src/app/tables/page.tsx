@@ -19,7 +19,9 @@ import {
   ChefHat,
   Check,
   X,
-  Truck
+  Truck,
+  BellRing,
+  CreditCard
 } from 'lucide-react';
 import { formatDateTime, formatCurrency } from '@/lib/utils';
 import TableQrModal from '@/components/TableQrModal';
@@ -31,6 +33,12 @@ interface DiningTable {
   capacity: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'AWAITING_PAYMENT';
   version: number;
+  pendingRequests?: Array<{
+    id: string;
+    requestType: 'CALL_WAITER' | 'REQUEST_PAYMENT';
+    note: string | null;
+    createdAt: string;
+  }>;
   currentOrder: {
     id: string;
     orderCode: string;
@@ -93,9 +101,10 @@ export default function TablesPage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 1. Tải danh sách bàn ăn
-  const fetchTables = useCallback(async () => {
-    setIsLoading(true);
+  // 1. Tải danh sách bàn ăn (không bật spinner khi polling ngầm)
+  const fetchTables = useCallback(async (showSkeleton: boolean | unknown = false) => {
+    const shouldShowSkeleton = showSkeleton === true;
+    if (shouldShowSkeleton) setIsLoading(true);
     setErrorMessage('');
     try {
       const res = await fetch('/api/tables');
@@ -109,15 +118,16 @@ export default function TablesPage() {
     } catch {
       setErrorMessage('Không thể kết nối đến máy chủ.');
     } finally {
-      setIsLoading(false);
+      if (shouldShowSkeleton) setIsLoading(false);
     }
   }, []);
 
-  // 2. Tải danh sách đơn online từ tất cả các sàn
-  const fetchOnlineOrders = useCallback(async () => {
-    setIsOnlineLoading(true);
+  // 2. Tải danh sách đơn online (limit=30 khi ở tab DINE_IN để đếm badge nhanh, 100 khi mở tab ONLINE_ORDERS)
+  const fetchOnlineOrders = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setIsOnlineLoading(true);
     try {
-      const res = await fetch('/api/admin/channels/all/orders?limit=100');
+      const limit = activeView === 'ONLINE_ORDERS' ? 100 : 30;
+      const res = await fetch(`/api/admin/channels/all/orders?limit=${limit}`);
       const data = await res.json();
       if (data.success) {
         setOnlineOrders(data.orders || []);
@@ -125,22 +135,25 @@ export default function TablesPage() {
     } catch {
       // Bỏ qua lỗi ngầm khi polling
     } finally {
-      setIsOnlineLoading(false);
+      if (showSpinner) setIsOnlineLoading(false);
     }
-  }, []);
+  }, [activeView]);
 
-  // Polling tự động làm mới mỗi 10 giây
+  // Polling tự động làm mới mỗi 10 giây (tạm dừng khi tab ẩn)
   useEffect(() => {
-    fetchTables();
-    fetchOnlineOrders();
+    fetchTables(true);
+    fetchOnlineOrders(activeView === 'ONLINE_ORDERS');
 
     const interval = setInterval(() => {
-      fetchTables();
-      fetchOnlineOrders();
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchTables(false);
+      if (activeView === 'ONLINE_ORDERS') {
+        fetchOnlineOrders(false);
+      }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchTables, fetchOnlineOrders]);
+  }, [fetchTables, fetchOnlineOrders, activeView]);
 
   // Đếm số đơn sàn đang chờ duyệt (NEW hoặc CONFIRMED mà chưa đẩy vào bếp)
   const pendingOnlineOrders = onlineOrders.filter(
@@ -152,6 +165,24 @@ export default function TablesPage() {
   const filteredTables = selectedArea === 'ALL'
     ? tables
     : tables.filter(t => t.areaName === selectedArea);
+
+  // Các bàn đang có yêu cầu hỗ trợ từ khách qua QR
+  const tablesWithRequests = tables.filter(t => t.pendingRequests && t.pendingRequests.length > 0);
+  const [acknowledgingTableId, setAcknowledgingTableId] = useState<string | null>(null);
+
+  const handleAcknowledgeRequests = async (tableId: string) => {
+    setAcknowledgingTableId(tableId);
+    try {
+      const res = await fetch(`/api/tables/${tableId}/acknowledge-requests`, { method: 'POST' });
+      if (res.ok) {
+        await fetchTables();
+      }
+    } catch {
+      // Bỏ qua lỗi mạng tạm thời
+    } finally {
+      setAcknowledgingTableId(null);
+    }
+  };
 
   // Lọc đơn sàn theo trạng thái & kênh
   const filteredOnlineOrders = onlineOrders.filter((o) => {
@@ -417,6 +448,26 @@ export default function TablesPage() {
         {activeView === 'DINE_IN' && (
           <div>
             {/* Cảnh báo xung đột phiên bản bàn */}
+            {tablesWithRequests.length > 0 && (
+              <div className="mb-6 p-4 rounded-2xl bg-orange-50 border border-orange-300 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 animate-bounce">
+                    <BellRing className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-extrabold text-orange-900">
+                      Có {tablesWithRequests.length} bàn đang gửi yêu cầu hỗ trợ qua mã QR!
+                    </div>
+                    <div className="text-xs text-orange-700 mt-0.5">
+                      {tablesWithRequests
+                        .map(t => `${t.tableCode} (${t.pendingRequests?.[0]?.requestType === 'REQUEST_PAYMENT' ? 'Yêu cầu thanh toán' : 'Gọi phục vụ'})`)
+                        .join(' • ')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {conflictNotice && (
               <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -540,6 +591,43 @@ export default function TablesPage() {
                         <Users className="w-4 h-4 text-slate-500" />
                         <span>Sức chứa: <strong className="text-slate-200">{table.capacity} khách</strong></span>
                       </div>
+
+                      {/* Thông báo yêu cầu hỗ trợ từ QR bàn */}
+                      {table.pendingRequests && table.pendingRequests.length > 0 && (
+                        <div className={`mb-3 p-3 rounded-xl border text-xs space-y-2 ${
+                          table.pendingRequests.some(r => r.requestType === 'REQUEST_PAYMENT')
+                            ? 'bg-purple-50 border-purple-300 text-purple-900'
+                            : 'bg-orange-50 border-orange-300 text-orange-900'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2 font-bold">
+                            <span className="inline-flex items-center gap-1.5">
+                              {table.pendingRequests.some(r => r.requestType === 'REQUEST_PAYMENT') ? (
+                                <CreditCard className="w-4 h-4 text-purple-600 animate-pulse" />
+                              ) : (
+                                <BellRing className="w-4 h-4 text-orange-600 animate-bounce" />
+                              )}
+                              <span>
+                                {table.pendingRequests.some(r => r.requestType === 'REQUEST_PAYMENT')
+                                  ? 'Khách yêu cầu thanh toán'
+                                  : 'Khách gọi phục vụ'}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleAcknowledgeRequests(table.id)}
+                              disabled={acknowledgingTableId === table.id}
+                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-[11px] font-bold text-slate-800 transition-colors shrink-0 disabled:opacity-60"
+                            >
+                              {acknowledgingTableId === table.id ? 'Đang xử lý...' : 'Đã tiếp nhận'}
+                            </button>
+                          </div>
+                          {table.pendingRequests[0]?.note && (
+                            <div className="text-[11px] opacity-90">
+                              Ghi chú: {table.pendingRequests[0].note}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Thông tin Order đang mở nếu có */}
                       {hasOrder && table.currentOrder && (

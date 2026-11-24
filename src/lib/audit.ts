@@ -17,6 +17,7 @@ export type AuditAction =
   | 'DELETE_MENU_ITEM'
   | 'CREATE_TABLE'
   | 'UPDATE_TABLE'
+  | 'ACKNOWLEDGE_SERVICE_REQUEST'
   | 'CREATE_USER'
   | 'UPDATE_USER'
   | 'DELETE_USER'

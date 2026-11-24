@@ -238,6 +238,128 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {/* BIỂU ĐỒ TRỰC QUAN: DOANH THU THEO NGÀY & TỶ TRỌNG NGUỒN ĐƠN */}
+        {revenueData && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            {/* Biểu đồ cột Doanh thu theo ngày (7 cột) */}
+            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-orange-600" />
+                    Biểu đồ Doanh thu theo ngày
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Tổng hợp từ các đơn đã chốt trong khoảng lọc</p>
+                </div>
+              </div>
+
+              {(() => {
+                const byDate = new Map<string, { date: string; total: number; count: number }>();
+                for (const ord of revenueData.orders || []) {
+                  const rawDate = ord.closedAt || ord.createdAt;
+                  if (!rawDate) continue;
+                  const d = new Date(rawDate);
+                  const key = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+                  const cur = byDate.get(key) || { date: key, total: 0, count: 0 };
+                  cur.total += Number(ord.totalAmount || 0);
+                  cur.count += 1;
+                  byDate.set(key, cur);
+                }
+                const series = Array.from(byDate.values()).slice(0, 10).reverse();
+                const maxVal = Math.max(...series.map(s => s.total), 1);
+
+                if (series.length === 0) {
+                  return (
+                    <div className="h-44 flex items-center justify-center text-sm text-slate-400">
+                      Chưa có dữ liệu doanh thu để vẽ biểu đồ.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="h-48 flex items-end gap-2 sm:gap-3 pt-6 pb-2 border-b border-slate-100">
+                    {series.map((bar) => {
+                      const heightPct = Math.max(8, Math.round((bar.total / maxVal) * 100));
+                      return (
+                        <div key={bar.date} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-7 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap pointer-events-none z-10 shadow-md">
+                            {formatCurrency(bar.total)} ({bar.count} đơn)
+                          </div>
+                          <div
+                            style={{ height: `${heightPct}%` }}
+                            className="w-full max-w-[38px] rounded-t-xl bg-gradient-to-t from-orange-600 to-amber-400 group-hover:from-orange-500 group-hover:to-amber-300 transition-all shadow-sm"
+                          />
+                          <span className="text-[11px] font-bold text-slate-600 mt-2">{bar.date}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Biểu đồ tỷ trọng Nguồn đơn (5 cột) */}
+            <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <h2 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                  Tỷ trọng Kênh bán hàng
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">Phân bổ doanh thu Tại bàn vs Sàn Online</p>
+              </div>
+
+              {(() => {
+                const totalRev = Number(revenueData.summary?.totalRevenue || 0);
+                const dineInRev = Number(revenueData.summary?.dineInRevenue || 0);
+                const onlineRev = Number(revenueData.summary?.onlineRevenue || 0);
+                const dineInPct = totalRev > 0 ? Math.round((dineInRev / totalRev) * 100) : 0;
+                const onlinePct = totalRev > 0 ? 100 - dineInPct : 0;
+
+                return (
+                  <div className="space-y-4 my-auto pt-4">
+                    <div className="w-full h-4 rounded-full bg-slate-100 overflow-hidden flex border border-slate-200">
+                      <div
+                        style={{ width: `${dineInPct}%` }}
+                        className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all"
+                        title={`Tại bàn: ${dineInPct}%`}
+                      />
+                      <div
+                        style={{ width: `${onlinePct}%` }}
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all"
+                        title={`Sàn Online: ${onlinePct}%`}
+                      />
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-orange-50 border border-orange-100">
+                        <div className="flex items-center gap-2 font-bold text-slate-800">
+                          <span className="w-3 h-3 rounded-full bg-orange-500" />
+                          <span>Ăn tại bàn ({revenueData.summary?.dineInCount || 0} đơn)</span>
+                        </div>
+                        <div className="text-right font-mono">
+                          <span className="font-black text-orange-700">{dineInPct}%</span>
+                          <span className="text-slate-500 ml-1.5">({formatCurrency(dineInRev)})</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
+                        <div className="flex items-center gap-2 font-bold text-slate-800">
+                          <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                          <span>Đơn sàn Online ({revenueData.summary?.onlineCount || 0} đơn)</span>
+                        </div>
+                        <div className="text-right font-mono">
+                          <span className="font-black text-emerald-700">{onlinePct}%</span>
+                          <span className="text-slate-500 ml-1.5">({formatCurrency(onlineRev)})</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
         {/* 2 Bảng: Món bán chạy & Danh sách đơn đã chốt */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
@@ -462,7 +584,9 @@ export default function ReportsPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                    Bàn: <strong className="text-orange-600 font-bold">{selectedOrder.tableCode}</strong> ({selectedOrder.areaName})
+                    {selectedOrder.tableCode && selectedOrder.tableCode !== 'Mang về / Online'
+                      ? <>Bàn: <strong className="text-orange-600 font-bold">{selectedOrder.tableCode}</strong> ({selectedOrder.areaName})</>
+                      : <>Kênh: <strong className="text-orange-600 font-bold">{selectedOrder.areaName || 'Đơn giao hàng Online'}</strong></>}
                   </p>
                 </div>
               </div>
@@ -506,7 +630,13 @@ export default function ReportsPage() {
                 <div className="col-span-1 sm:col-span-2 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Thanh toán: Chuyển khoản VietQR đã được xác nhận</span>
+                    <span>
+                      {Number(selectedOrder.totalAmount) === 0
+                        ? 'Thanh toán: Đơn hàng 0 đồng (đã hủy toàn bộ món)'
+                        : selectedOrder.tableCode && selectedOrder.tableCode !== 'Mang về / Online'
+                        ? 'Thanh toán: Chuyển khoản VietQR đã được xác nhận'
+                        : 'Thanh toán: Đã đối soát qua kênh giao hàng đối tác'}
+                    </span>
                   </div>
                   {orderDetailData?.paymentReference && (
                     <span className="text-xs font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">

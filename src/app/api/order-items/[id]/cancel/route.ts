@@ -27,6 +27,35 @@ export async function POST(
 
     const result = await withTransaction(async (tx) => {
       // 1. Khóa và lấy thông tin order_item
+      // 1. Tra cứu order_id trước, sau đó khóa theo đúng thứ tự chuẩn (orders -> order_items) để tránh deadlock
+      const itemRef = await tx.queryOne<{ order_id: string }>(
+        `SELECT order_id FROM order_items WHERE id = $1;`,
+        [orderItemId]
+      );
+
+      if (!itemRef) {
+        throw { code: 'ITEM_NOT_FOUND', message: 'Món ăn không tồn tại trong đơn hàng.' };
+      }
+
+      // Khóa Order trước
+      const order = await tx.queryOne<{
+        id: string;
+        order_code: string;
+        table_id: string;
+        status: string;
+        total_amount: number;
+      }>(
+        `SELECT id, order_code, table_id, status, total_amount 
+         FROM orders 
+         WHERE id = $1 FOR UPDATE;`,
+        [itemRef.order_id]
+      );
+
+      if (!order || order.status === 'CLOSED') {
+        throw { code: 'ORDER_CLOSED', message: 'Đơn hàng đã đóng, không thể hủy món.' };
+      }
+
+      // Sau đó mới khóa OrderItem
       const item = await tx.queryOne<{
         id: string;
         order_id: string;
@@ -56,24 +85,6 @@ export async function POST(
           code: 'CANNOT_CANCEL_COOKING_ITEM',
           message: `Không thể hủy món '${item.item_name_snapshot}' vì bếp đã bắt đầu chế biến hoặc món đã sẵn sàng.`,
         };
-      }
-
-      // Khóa và lấy thông tin Order
-      const order = await tx.queryOne<{
-        id: string;
-        order_code: string;
-        table_id: string;
-        status: string;
-        total_amount: number;
-      }>(
-        `SELECT id, order_code, table_id, status, total_amount 
-         FROM orders 
-         WHERE id = $1 FOR UPDATE;`,
-        [item.order_id]
-      );
-
-      if (!order || order.status === 'CLOSED') {
-        throw { code: 'ORDER_CLOSED', message: 'Đơn hàng đã đóng, không thể hủy món.' };
       }
 
       let restoredStock = false;

@@ -5,14 +5,18 @@ services:
     container_name: smart-restaurant-db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
-      POSTGRES_DB: smart_restaurant
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: ${POSTGRES_DB:-smart_restaurant}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./prisma/migrations/0_init/migration.sql:/docker-entrypoint-initdb.d/0_init.sql:ro
+      - ./prisma/migrations/1_sales_channels/migration.sql:/docker-entrypoint-initdb.d/1_sales_channels.sql:ro
+      - ./prisma/migrations/2_hardening_constraints_indexes/migration.sql:/docker-entrypoint-initdb.d/2_hardening_constraints_indexes.sql:ro
+      - ./prisma/migrations/3_guest_service_requests/migration.sql:/docker-entrypoint-initdb.d/3_guest_service_requests.sql:ro
+      - ./prisma/migrations/4_item_notes/migration.sql:/docker-entrypoint-initdb.d/4_item_notes.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d smart_restaurant"]
       interval: 5s
@@ -31,8 +35,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: "postgresql://postgres:postgres_password@postgres:5432/smart_restaurant?schema=public"
-      JWT_SECRET: "smart_restaurant_jwt_super_secret_key_change_in_production_2026"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_password}@postgres:5432/${POSTGRES_DB:-smart_restaurant}?schema=public"
+      JWT_SECRET: "${JWT_SECRET:-smart_restaurant_jwt_super_secret_key_change_in_production_2026}"
+      SALES_CHANNEL_ENCRYPTION_KEY: "${SALES_CHANNEL_ENCRYPTION_KEY:-smart_restaurant_sales_channel_enc_key_change_prod_2026}"
       JWT_EXPIRES_IN: "8h"
       LOW_STOCK_THRESHOLD: "5"
       KITCHEN_WARNING_DELAY_MINUTES: "10"

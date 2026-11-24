@@ -24,24 +24,17 @@ body {
 .touch-target {
   min-height: 44px;
   min-width: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
-/* Hiệu ứng Glassmorphism & Card tươi sáng, tinh tế */
+/* Hiệu ứng Card tươi sáng, tối ưu GPU (bỏ backdrop-filter nặng trên danh sách nhiều card) */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
 }
 
 .glass-card {
   background: #ffffff;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
 }
@@ -82,11 +75,17 @@ body {
 }
 
 /* ==========================================================================
-   TƯƠI SÁNG & SANG TRỌNG: Light Theme Overrides cho toàn bộ ứng dụng
+   TƯƠI SÁNG & SANG TRỌNG: Light Theme Overrides (chỉ áp dụng trên màn hình, không đè @media print)
    ========================================================================== */
+@media screen {
 
 /* Nền trang & Container chính */
-.bg-slate-950 {
+.bg-slate-950,
+.bg-slate-950\/60,
+.bg-slate-950\/70,
+.bg-slate-950\/80,
+.bg-slate-950\/90,
+.bg-slate-950\/95 {
   background-color: #f8fafc !important;
 }
 
@@ -291,10 +290,16 @@ input:focus, select:focus, textarea:focus {
   color: #854d0e !important;
 }
 
+} /* Kết thúc @media screen */
+
 /* ==========================================================================
    TỐI ƯU HÓA ĐƠN IN ẤN (@media print)
    ========================================================================== */
 @media print {
+  @page {
+    margin: 12mm;
+  }
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
@@ -314,11 +319,25 @@ input:focus, select:focus, textarea:focus {
     padding: 10px !important;
   }
 
+  #invoice-qr-image,
+  #invoice-qr-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   #invoice-qr-image {
     max-width: 180px !important;
     height: auto !important;
     display: block !important;
     margin: 0 auto !important;
+  }
+
+  .print-k80 {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    font-size: 10pt !important;
+    padding: 4mm !important;
   }
 }
 

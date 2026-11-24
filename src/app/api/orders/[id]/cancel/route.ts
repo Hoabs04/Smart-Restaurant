@@ -33,11 +33,12 @@ export async function POST(
       const order = await tx.queryOne<{
         id: string;
         order_code: string;
-        table_id: string;
+        table_id: string | null;
         status: string;
         total_amount: number;
+        payment_status: string | null;
       }>(
-        `SELECT id, order_code, table_id, status, total_amount 
+        `SELECT id, order_code, table_id, status, total_amount, payment_status
          FROM orders 
          WHERE id = $1 FOR UPDATE;`,
         [orderId]
@@ -65,6 +66,18 @@ export async function POST(
       );
 
       const activeItems = items.filter(it => it.status !== 'CANCELLED');
+
+      // Bảo vệ nghiệp vụ: Phục vụ không thể tự ý hủy toàn bộ đơn khi đã có món đang nấu/xong hoặc đã xác nhận thanh toán
+      const hasCookedOrReady = activeItems.some(
+        it => it.status === 'IN_PROGRESS' || it.status === 'READY'
+      );
+      if (actor.role !== 'manager' && (hasCookedOrReady || order.payment_status === 'MANUALLY_CONFIRMED')) {
+        throw {
+          code: 'CANCEL_RESTRICTED',
+          message:
+            'Không thể hủy toàn bộ đơn khi đã có món đang chế biến/sẵn sàng hoặc đã xác nhận thanh toán. Vui lòng liên hệ Quản lý.',
+        };
+      }
 
       // 3. Xử lý hoàn kho và hủy từng món chưa hủy
       for (const item of activeItems) {
@@ -119,13 +132,15 @@ export async function POST(
         [orderId]
       );
 
-      // 5. Giải phóng bàn ăn về AVAILABLE
-      await tx.execute(
-        `UPDATE dining_tables 
-         SET status = 'AVAILABLE', version = version + 1, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $1;`,
-        [order.table_id]
-      );
+      // 5. Giải phóng bàn ăn về AVAILABLE nếu có bàn
+      if (order.table_id) {
+        await tx.execute(
+          `UPDATE dining_tables 
+           SET status = 'AVAILABLE', version = version + 1, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1;`,
+          [order.table_id]
+        );
+      }
 
       // 6. Ghi lịch sử Order
       await tx.execute(
@@ -165,7 +180,19 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Lỗi API POST /api/orders/[id]/cancel:', error);
-    if (error.code === 'ORDER_NOT_FOUND' || error.code === 'ORDER_ALREADY_CLOSED') {
+    if (error.code === 'ORDER_NOT_FOUND') {
+      return NextResponse.json(
+        { success: false, code: error.code, message: error.message },
+        { status: 404 }
+      );
+    }
+    if (error.code === 'CANCEL_RESTRICTED') {
+      return NextResponse.json(
+        { success: false, code: error.code, message: error.message },
+        { status: 403 }
+      );
+    }
+    if (error.code === 'ORDER_ALREADY_CLOSED') {
       return NextResponse.json(
         { success: false, code: error.code, message: error.message },
         { status: 400 }

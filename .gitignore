@@ -18,6 +18,8 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.staging
 
 # Debug logs
 npm-debug.log*
@@ -40,9 +42,12 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Embedded Local Database
+# Embedded Local Database & Backups
 .db_pglite/
 .db_pglite_test/
+backups/
+scratch/
+GEMINI.md
 cookie.txt
 
 *.swp

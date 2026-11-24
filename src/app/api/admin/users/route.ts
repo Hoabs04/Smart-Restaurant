@@ -80,9 +80,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { username, password, display_name, role_code } = body;
 
-    if (!username || !password || !display_name || !role_code) {
+    if (typeof username !== 'string' || typeof password !== 'string' || typeof display_name !== 'string' || typeof role_code !== 'string' || !username.trim() || !password || !display_name.trim() || !role_code) {
       return NextResponse.json(
         { success: false, code: 'INVALID_INPUT', message: 'Vui lòng điền đầy đủ tên đăng nhập, mật khẩu, tên hiển thị và vai trò.' },
+        { status: 400 }
+      );
+    }
+
+    if (password.length < 8) {
+      return NextResponse.json(
+        { success: false, code: 'WEAK_PASSWORD', message: 'Mật khẩu phải có ít nhất 8 ký tự.' },
         { status: 400 }
       );
     }
@@ -156,9 +163,24 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { id, display_name, role_code, is_active, password } = body;
 
-    if (!id || !display_name || !role_code) {
+    if (typeof id !== 'string' || typeof display_name !== 'string' || typeof role_code !== 'string' || !id || !display_name.trim() || !role_code) {
       return NextResponse.json(
         { success: false, code: 'INVALID_INPUT', message: 'Vui lòng cung cấp đầy đủ thông tin cần cập nhật.' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof password === 'string' && password.trim().length > 0 && password.trim().length < 8) {
+      return NextResponse.json(
+        { success: false, code: 'WEAK_PASSWORD', message: 'Mật khẩu mới phải có ít nhất 8 ký tự.' },
+        { status: 400 }
+      );
+    }
+
+    const active = is_active !== undefined ? Boolean(is_active) : true;
+    if (id === actor.userId && (!active || role_code !== 'manager')) {
+      return NextResponse.json(
+        { success: false, code: 'SELF_LOCKOUT', message: 'Bạn không thể tự khóa hoặc tự hạ quyền quản lý của chính mình.' },
         { status: 400 }
       );
     }
@@ -172,31 +194,46 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Cập nhật thông tin cơ bản
-    const active = is_active !== undefined ? Boolean(is_active) : true;
-    if (password && password.trim()) {
-      const passwordHash = await hashPassword(password.trim());
-      await db.execute(
-        `UPDATE users 
-         SET display_name = $1, is_active = $2, password_hash = $3, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4;`,
-        [display_name.trim(), active, passwordHash, id]
-      );
-    } else {
-      await db.execute(
-        `UPDATE users 
-         SET display_name = $1, is_active = $2, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3;`,
-        [display_name.trim(), active, id]
-      );
-    }
+    const { withTransaction } = await import('@/lib/db');
+    await withTransaction(async (tx) => {
+      // Kiểm tra không cho khóa hoặc hạ quyền quản lý active cuối cùng
+      if (!active || role_code !== 'manager') {
+        const otherManagers = await tx.queryOne<{ cnt: number }>(
+          `SELECT COUNT(*)::int AS cnt
+           FROM users u
+           JOIN user_roles ur ON u.id = ur.user_id
+           JOIN roles r ON ur.role_id = r.id
+           WHERE r.code = 'manager' AND u.is_active = true AND u.id <> $1;`,
+          [id]
+        );
+        if ((otherManagers?.cnt || 0) === 0) {
+          throw { code: 'LAST_MANAGER', message: 'Không thể khóa hoặc hạ quyền Quản lý hoạt động cuối cùng của hệ thống.' };
+        }
+      }
 
-    // Cập nhật vai trò
-    await db.execute(`DELETE FROM user_roles WHERE user_id = $1;`, [id]);
-    await db.execute(
-      `INSERT INTO user_roles (id, user_id, role_id) VALUES ($1, $2, $3);`,
-      [crypto.randomUUID(), id, role.id]
-    );
+      if (typeof password === 'string' && password.trim()) {
+        const passwordHash = await hashPassword(password.trim());
+        await tx.execute(
+          `UPDATE users 
+           SET display_name = $1, is_active = $2, password_hash = $3, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $4;`,
+          [display_name.trim(), active, passwordHash, id]
+        );
+      } else {
+        await tx.execute(
+          `UPDATE users 
+           SET display_name = $1, is_active = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $3;`,
+          [display_name.trim(), active, id]
+        );
+      }
+
+      await tx.execute(`DELETE FROM user_roles WHERE user_id = $1;`, [id]);
+      await tx.execute(
+        `INSERT INTO user_roles (id, user_id, role_id) VALUES ($1, $2, $3);`,
+        [crypto.randomUUID(), id, role.id]
+      );
+    });
 
     await logAudit({
       actorId: actor.userId,
@@ -212,6 +249,12 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Lỗi API PUT /api/admin/users:', error);
+    if (error?.code === 'LAST_MANAGER') {
+      return NextResponse.json(
+        { success: false, code: 'LAST_MANAGER', message: error.message },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       { success: false, code: 'SERVER_ERROR', message: 'Lỗi khi cập nhật tài khoản.' },
       { status: 500 }

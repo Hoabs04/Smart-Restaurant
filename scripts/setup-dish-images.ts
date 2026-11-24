@@ -8,7 +8,10 @@ async function main() {
   const publicDishesDir = path.join(process.cwd(), 'public', 'images', 'dishes');
   fs.mkdirSync(publicDishesDir, { recursive: true });
 
-  const brainDir = 'C:\\Users\\ADMIN\\.gemini\\antigravity-ide\\brain\\eebc3706-2530-4dfb-a3d3-6f930957964f';
+  const brainDir =
+    process.env.DISH_IMAGES_SOURCE_DIR ||
+    process.argv[2] ||
+    publicDishesDir;
 
   const imageMap: Record<string, string> = {
     'Súp bào ngư vi cá': 'abalone_soup_1792923994061.jpg',

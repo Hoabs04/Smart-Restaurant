@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     if (source === 'DINE_IN') {
       sql += ` AND o.table_id IS NOT NULL`;
     } else if (source === 'ONLINE') {
-      sql += ` AND (o.table_id IS NULL OR o.order_source IS NOT NULL)`;
+      sql += ` AND (o.table_id IS NULL OR o.order_source <> 'DINE_IN')`;
     }
 
     sql += ` ORDER BY o.closed_at DESC;`;

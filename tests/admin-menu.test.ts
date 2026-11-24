@@ -46,7 +46,7 @@ async function createRequest(
     headers['cookie'] = `smart_rest_token=${token}`;
   }
 
-  const reqInit: RequestInit = {
+  const reqInit: { method: string; headers: Record<string, string>; body?: string } = {
     method,
     headers,
   };

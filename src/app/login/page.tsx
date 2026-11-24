@@ -134,7 +134,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Accounts Selection */}
+          {/* Quick Demo Accounts Selection (chỉ hiển thị khi bật cờ môi trường demo) */}
+          {process.env.NEXT_PUBLIC_ENABLE_DEMO_ACCOUNTS === 'true' && (
           <div className="mt-8 pt-6 border-t border-slate-800">
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 text-center">
               Tài khoản demo mẫu (Chọn nhanh)
@@ -178,9 +179,10 @@ export default function LoginPage() {
               </button>
             </div>
             <p className="text-[11px] text-slate-500 text-center mt-3">
-              Mật khẩu mẫu được mã hóa an toàn bằng Bcrypt. Không hiển thị mật khẩu thật ra giao diện.
+              Tài khoản mẫu chỉ hiển thị trong môi trường thử nghiệm.
             </p>
           </div>
+          )}
         </div>
 
         {/* Footer info */}

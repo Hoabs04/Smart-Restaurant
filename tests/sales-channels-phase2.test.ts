@@ -230,7 +230,7 @@ async function runPhase2Tests() {
     recordTest(
       'KitchenQueue/Push',
       'Đẩy đơn vào Bếp và trừ tồn kho trong InventoryLedger',
-      pushResult.success && internalOrder?.order_source === 'GRABFOOD' && internalOrder.table_id === null && isStockCorrect && ledgerEntry?.quantity_delta === -2,
+      Boolean(pushResult.success && internalOrder?.order_source === 'GRABFOOD' && internalOrder.table_id === null && isStockCorrect && ledgerEntry?.quantity_delta === -2),
       `Đơn nội bộ ${internalOrder?.id} được tạo (table_id: null, order_source: GRABFOOD). Tồn kho: ${initialStock} -> ${updatedDish?.stock_quantity} (Đã trừ 2 phần).`
     );
 
