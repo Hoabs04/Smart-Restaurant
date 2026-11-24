@@ -89,19 +89,30 @@ export async function POST(
   const auth = await requireAuth(req, ['manager']);
   if ('errorResponse' in auth) return auth.errorResponse;
 
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json(
-      { success: false, code: 'FORBIDDEN_IN_PRODUCTION', message: 'Tính năng giả lập đơn hàng bị vô hiệu hóa trên production.' },
-      { status: 403 }
-    );
-  }
-
   try {
     const { channelCode } = await context.params;
     const body = await req.json().catch(() => ({}));
 
     const provider = getChannelProvider(channelCode);
     const db = await getDb();
+
+    // Trên production, chỉ cho phép quản lý giả lập đơn với kênh đang ở chế độ SANDBOX (hoặc khi bật ENABLE_CHANNEL_SIMULATION=true)
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_CHANNEL_SIMULATION !== 'true') {
+      const credEnv = await db.queryOne<{ environment: string }>(
+        `SELECT cc.environment
+         FROM channel_credentials cc
+         JOIN sales_channels sc ON sc.id = cc.channel_id
+         WHERE UPPER(sc.code) = UPPER($1)
+         LIMIT 1;`,
+        [channelCode]
+      );
+      if (credEnv?.environment === 'PRODUCTION') {
+        return NextResponse.json(
+          { success: false, code: 'FORBIDDEN_IN_PRODUCTION', message: 'Không thể giả lập đơn trên kênh đang cấu hình PRODUCTION.' },
+          { status: 403 }
+        );
+      }
+    }
 
     // Tự động tìm món đã ánh xạ hoặc món thực đơn có sẵn để mô phỏng nhận đơn mượt mà
     let simulationItems = body.items;
